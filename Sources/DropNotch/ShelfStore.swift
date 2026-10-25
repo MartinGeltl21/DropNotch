@@ -12,7 +12,7 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     var name: String { url.lastPathComponent }
 }
 
-/// Die Datei-Ablage. Wird als JSON in ~/Library/Application Support/NotchStash gespeichert,
+/// Die Datei-Ablage. Wird als JSON in ~/Library/Application Support/DropNotch gespeichert,
 /// überlebt also Neustarts.
 @MainActor
 final class ShelfStore: ObservableObject {
@@ -24,7 +24,7 @@ final class ShelfStore: ObservableObject {
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        baseDir = support.appendingPathComponent("NotchStash", isDirectory: true)
+        baseDir = support.appendingPathComponent("DropNotch", isDirectory: true)
         try? FileManager.default.createDirectory(at: filesDir, withIntermediateDirectories: true)
         load()
     }
@@ -70,7 +70,7 @@ final class ShelfStore: ObservableObject {
                         self.append(ShelfItem(id: id, url: destination, bookmark: nil, isCopy: true))
                     }
                 } catch {
-                    NSLog("NotchStash: Kopieren fehlgeschlagen: \(error)")
+                    NSLog("DropNotch: Kopieren fehlgeschlagen: \(error)")
                 }
             }
         } else {
@@ -91,7 +91,7 @@ final class ShelfStore: ObservableObject {
             try png.write(to: url)
             append(ShelfItem(id: id, url: url, bookmark: nil, isCopy: true))
         } catch {
-            NSLog("NotchStash: Bild speichern fehlgeschlagen: \(error)")
+            NSLog("DropNotch: Bild speichern fehlgeschlagen: \(error)")
         }
     }
 
@@ -169,7 +169,7 @@ final class ShelfStore: ObservableObject {
             let data = try JSONEncoder().encode(items)
             try data.write(to: indexURL, options: .atomic)
         } catch {
-            NSLog("NotchStash: Ablage speichern fehlgeschlagen: \(error)")
+            NSLog("DropNotch: Ablage speichern fehlgeschlagen: \(error)")
         }
     }
 }

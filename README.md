@@ -1,6 +1,8 @@
-# NotchStash
+# DropNotch
 
 Werbefreier Nachbau der Kernfunktionen von NotchBox für macOS: eine Datei-Ablage und eine Spotify-Steuerung direkt in der Notch.
+
+> Unabhängiges Hobbyprojekt, nicht mit NotchBox oder Spotify verbunden.
 
 ## Funktionen
 
@@ -23,7 +25,7 @@ scripts/build-app.sh --run       # bauen und starten
 scripts/build-app.sh --install   # nach /Applications kopieren (nötig für „Bei Anmeldung starten“)
 ```
 
-Beim ersten Klick auf Play fragt macOS, ob NotchStash Spotify steuern darf. Erlauben.
+Beim ersten Klick auf Play fragt macOS, ob DropNotch Spotify steuern darf. Erlauben.
 
 > Tipp: Mit Ad-hoc-Signatur fragt macOS nach **jedem** Neu-Bauen erneut nach. Mit einem
 > Entwicklerzertifikat passiert das nicht:
@@ -38,7 +40,7 @@ In Xcode öffnen: `open Package.swift`
 | Fenster | `NotchPanel.swift` | Rahmenloses `NSPanel` über der Menüleiste, ohne Aktivierung, auf allen Spaces |
 | Hover und Drag | `NotchViewModel.swift` | Fragt 30-mal pro Sekunde `NSEvent.mouseLocation` ab. Einen systemweiten Datei-Drag erkennt es am `changeCount` des Drag-Pasteboards. Ist die Notch zu, lässt das Panel Klicks durch (`ignoresMouseEvents`). |
 | Notch-Größe | `NotchViewModel.updateScreen()` | `safeAreaInsets.top` und `auxiliaryTopLeft/RightArea` des Displays |
-| Ablage | `ShelfStore.swift` | JSON und Bookmarks in `~/Library/Application Support/NotchStash` |
+| Ablage | `ShelfStore.swift` | JSON und Bookmarks in `~/Library/Application Support/DropNotch` |
 | Spotify | `SpotifyController.swift` | AppleScript zum Abfragen und Steuern, außerdem die Distributed Notification `com.spotify.client.PlaybackStateChanged` |
 
 Warum AppleScript statt MediaRemote? Das private MediaRemote-Framework funktioniert seit macOS 15.4 für Dritt-Apps nicht mehr zuverlässig. Spotifys AppleScript-Schnittstelle ist dagegen stabil.

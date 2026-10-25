@@ -7,7 +7,7 @@ struct NowPlayingView: View {
         if !spotify.isInstalled {
             placeholder(icon: "music.note", text: "Spotify ist nicht installiert")
         } else if spotify.permissionDenied {
-            placeholder(icon: "lock", text: "Erlaube NotchStash, Spotify zu steuern",
+            placeholder(icon: "lock", text: "Erlaube DropNotch, Spotify zu steuern",
                         button: "Einstellungen öffnen", action: spotify.openAutomationSettings)
         } else if !spotify.isRunning {
             placeholder(icon: "music.note", text: "Spotify ist nicht geöffnet",

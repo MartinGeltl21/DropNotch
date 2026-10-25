@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "tray.and.arrow.down", accessibilityDescription: "NotchStash")
+        statusItem.button?.image = NSImage(systemSymbolName: "tray.and.arrow.down", accessibilityDescription: "DropNotch")
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Bei Anmeldung starten", #selector(toggleLaunchAtLogin),
                           on: SMAppService.mainApp.status == .enabled))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "NotchStash beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "DropNotch beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func item(_ title: String, _ action: Selector, on: Bool? = nil) -> NSMenuItem {
@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             let alert = NSAlert(error: error)
             alert.messageText = "Autostart konnte nicht geändert werden"
-            alert.informativeText = "Lege NotchStash.app in den Programme-Ordner und versuche es erneut.\n\n\(error.localizedDescription)"
+            alert.informativeText = "Lege DropNotch.app in den Programme-Ordner und versuche es erneut.\n\n\(error.localizedDescription)"
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         }

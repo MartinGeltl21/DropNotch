@@ -27,7 +27,7 @@ final class SpotifyController: ObservableObject {
     @Published private(set) var position: Double = 0
     @Published private(set) var positionDate = Date()
 
-    private let queue = DispatchQueue(label: "de.moritz.notchstash.applescript")
+    private let queue = DispatchQueue(label: "de.moritz.dropnotch.applescript")
     private var artworkURL: URL?
     private var observers: [NSObjectProtocol] = []
 

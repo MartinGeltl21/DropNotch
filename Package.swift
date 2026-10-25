@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "NotchStash",
+    name: "DropNotch",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "NotchStash",
-            path: "Sources/NotchStash"
+            name: "DropNotch",
+            path: "Sources/DropNotch"
         )
     ]
 )
