@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode auswählen
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_RC' | sort -V | tail -n 1)"
+          echo "Verwende $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: |
+          if [ -d Tests ]; then
+            swift test
+          else
+            echo "Kein Tests/-Verzeichnis – übersprungen."
+          fi
+
+      - name: App-Bundle bauen (Smoke-Test)
+        run: scripts/build-app.sh

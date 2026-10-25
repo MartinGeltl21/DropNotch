@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # volle Historie → Commit-Anzahl als CFBundleVersion
+
+      - name: Xcode auswählen
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_RC' | sort -V | tail -n 1)"
+          echo "Verwende $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      - name: Version aus Tag ableiten
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Universal-App bauen, ad-hoc signieren, zippen
+        env:
+          UNIVERSAL: "1"
+          SIGN_IDENTITY: "-"
+        run: |
+          scripts/build-app.sh --zip
+          lipo -archs build/DropNotch.app/Contents/MacOS/DropNotch
+          codesign --verify --deep --strict --verbose=2 build/DropNotch.app
+          test -f "build/DropNotch-$VERSION.zip"
+
+      - name: GitHub-Release erstellen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ZIP="build/DropNotch-$VERSION.zip"
+          SHA="$(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
+          cat > release-notes.md <<NOTES
+          ## Installation
+
+          1. \`DropNotch-$VERSION.zip\` herunterladen und entpacken.
+          2. \`DropNotch.app\` in den Ordner **Programme** (\`/Applications\`) ziehen.
+          3. Die App ist nur ad-hoc signiert und **nicht notarisiert**. Beim ersten Start daher
+             **Rechtsklick → Öffnen** wählen (ab macOS 15: nach dem ersten Startversuch unter
+             *Systemeinstellungen → Datenschutz & Sicherheit* auf „Dennoch öffnen“ klicken)
+             oder im Terminal ausführen:
+
+             \`\`\`sh
+             xattr -dr com.apple.quarantine /Applications/DropNotch.app
+             \`\`\`
+
+          Voraussetzung: macOS 14 (Sonoma) oder neuer, Apple Silicon oder Intel (Universal-Binary).
+
+          SHA-256 von \`DropNotch-$VERSION.zip\`: \`$SHA\`
+          NOTES
+
+          PRERELEASE=""
+          if [[ "$VERSION" == *-* ]]; then PRERELEASE="--prerelease"; fi
+
+          gh release create "$GITHUB_REF_NAME" "$ZIP" \
+            --verify-tag \
+            --title "DropNotch $VERSION" \
+            --notes-file release-notes.md \
+            --generate-notes \
+            $PRERELEASE
