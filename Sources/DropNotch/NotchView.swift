@@ -187,12 +187,19 @@ struct EqualizerView: View {
             let t = context.date.timeIntervalSinceReferenceDate
             HStack(alignment: .center, spacing: 2) {
                 ForEach(0..<4, id: \.self) { i in
-                    let phase = sin(t * (5 + Double(i) * 1.7) + Double(i) * 1.3)
                     Capsule()
                         .fill(color)
-                        .frame(width: 2.5, height: 4 + 8 * CGFloat((phase + 1) / 2))
+                        .frame(width: 2.5, height: Self.barHeight(index: i, time: t))
                 }
             }
         }
+    }
+
+    /// Height of a bar between 4 and 12 pt; each bar swings at its own speed.
+    /// Kept out of `body` so older compilers can type-check the view quickly.
+    private static func barHeight(index: Int, time: Double) -> CGFloat {
+        let i = Double(index)
+        let phase: Double = sin(time * (5 + i * 1.7) + i * 1.3)
+        return CGFloat(4 + 8 * (phase + 1) / 2)
     }
 }
