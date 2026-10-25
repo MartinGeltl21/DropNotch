@@ -6,8 +6,10 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     var url: URL
     /// Bookmark, damit verlinkte Dateien auch nach Verschieben/Umbenennen gefunden werden.
     var bookmark: Data?
-    /// true = Kopie liegt im App-eigenen Ordner und wird beim Entfernen gelöscht.
+    /// true = Kopie liegt im App-eigenen Ordner und wandert beim Entfernen in den Papierkorb.
     var isCopy: Bool
+    /// Originaldatei einer Kopie – damit dieselbe Datei nicht doppelt abgelegt wird.
+    var sourceURL: URL? = nil
 
     var name: String { url.lastPathComponent }
 }
@@ -30,6 +32,8 @@ final class ShelfStore: ObservableObject {
     }
 
     private var copyFiles: Bool { UserDefaults.standard.bool(forKey: Settings.copyFiles) }
+    /// Originale, die gerade im Hintergrund kopiert werden.
+    private var pendingCopies = Set<URL>()
 
     // MARK: - Hinzufügen
 
@@ -57,20 +61,27 @@ final class ShelfStore: ObservableObject {
     func add(fileURL: URL) {
         let url = fileURL.standardizedFileURL
         guard FileManager.default.fileExists(atPath: url.path),
-              !items.contains(where: { $0.url.standardizedFileURL == url }) else { return }
+              !pendingCopies.contains(url),
+              !items.contains(where: { $0.url.standardizedFileURL == url || $0.sourceURL == url })
+        else { return }
 
         if copyFiles && !url.path.hasPrefix(filesDir.path) {
             let id = UUID()
-            let destination = makeItemDir(id).appendingPathComponent(url.lastPathComponent)
+            let dir = makeItemDir(id)
+            let destination = dir.appendingPathComponent(url.lastPathComponent)
+            pendingCopies.insert(url)
             // Große Ordner nicht auf dem Main-Thread kopieren.
             Task.detached(priority: .userInitiated) {
                 do {
                     try FileManager.default.copyItem(at: url, to: destination)
                     await MainActor.run {
-                        self.append(ShelfItem(id: id, url: destination, bookmark: nil, isCopy: true))
+                        self.pendingCopies.remove(url)
+                        self.append(ShelfItem(id: id, url: destination, bookmark: nil, isCopy: true, sourceURL: url))
                     }
                 } catch {
                     NSLog("DropNotch: Kopieren fehlgeschlagen: \(error)")
+                    try? FileManager.default.removeItem(at: dir)
+                    await MainActor.run { _ = self.pendingCopies.remove(url) }
                 }
             }
         } else {
@@ -122,11 +133,12 @@ final class ShelfStore: ObservableObject {
 
     private func deleteCopyIfNeeded(_ item: ShelfItem) {
         guard item.isCopy else { return }
-        // Nur den App-eigenen Ordner löschen, nie Originaldateien.
+        // Nur Kopien aus dem App-eigenen Ordner, nie Originaldateien. Sie landen im
+        // Papierkorb statt endgültig gelöscht zu werden – falls es die einzige Kopie war.
         let dir = item.url.deletingLastPathComponent()
-        if dir.path.hasPrefix(filesDir.path) {
-            try? FileManager.default.removeItem(at: dir)
-        }
+        guard dir.path.hasPrefix(filesDir.path) else { return }
+        try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+        try? FileManager.default.removeItem(at: dir)
     }
 
     // MARK: - Persistenz

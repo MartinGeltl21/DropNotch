@@ -37,8 +37,17 @@ final class SpotifyController: ObservableObject {
         observers.append(DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.spotify.client.PlaybackStateChanged"),
             object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+        ) { [weak self] note in
+            // Beim Beenden meldet Spotify "Stopped". Würden wir dann per AppleScript
+            // nachfragen, startet macOS Spotify sofort wieder.
+            let stopped = note.userInfo?["Player State"] as? String == "Stopped"
+            MainActor.assumeIsolated {
+                if stopped {
+                    self?.isPlaying = false
+                } else {
+                    self?.refresh()
+                }
+            }
         })
 
         let workspace = NSWorkspace.shared.notificationCenter

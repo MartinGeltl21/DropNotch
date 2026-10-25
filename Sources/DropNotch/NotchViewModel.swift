@@ -138,7 +138,10 @@ final class NotchViewModel: ObservableObject {
         updateDragState(buttonDown: buttonDown)
 
         // Hover-Zone etwas großzügiger als die Notch, damit man sie leicht trifft.
-        let hotZone = screenRect(width: closedWidth + earRadius * 2 + 16, height: notchSize.height + 4)
+        // Im Peek-Zustand zählt die ganze sichtbare "Hier ablegen"-Fläche, sonst
+        // würde eine Datei, die man direkt auf den Text zieht, nicht angenommen.
+        let hotSize = state == .peek ? shapeSize : CGSize(width: closedWidth, height: notchSize.height)
+        let hotZone = screenRect(width: hotSize.width + earRadius * 2 + 16, height: hotSize.height + 4)
             .insetBy(dx: 0, dy: -4)
         let openZone = screenRect(width: openWidth + earRadius * 2 + 12, height: openHeight + 10)
             .insetBy(dx: 0, dy: -4)
