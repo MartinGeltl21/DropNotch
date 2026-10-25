@@ -55,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item("Dateien kopieren statt verlinken", #selector(toggleCopy),
                           on: defaults.bool(forKey: Settings.copyFiles)))
+        menu.addItem(item("Nach Herausziehen aus der Ablage entfernen", #selector(toggleRemoveAfterDragOut),
+                          on: defaults.bool(forKey: Settings.removeAfterDragOut)))
         menu.addItem(item("Musik in geschlossener Notch zeigen", #selector(toggleLiveActivity),
                           on: defaults.bool(forKey: Settings.showMusicWhenClosed)))
         menu.addItem(item("Bei Anmeldung starten", #selector(toggleLaunchAtLogin),
@@ -84,6 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleCopy() {
         let defaults = UserDefaults.standard
         defaults.set(!defaults.bool(forKey: Settings.copyFiles), forKey: Settings.copyFiles)
+    }
+
+    @objc private func toggleRemoveAfterDragOut() {
+        let defaults = UserDefaults.standard
+        defaults.set(!defaults.bool(forKey: Settings.removeAfterDragOut), forKey: Settings.removeAfterDragOut)
     }
 
     @objc private func toggleLiveActivity() {
