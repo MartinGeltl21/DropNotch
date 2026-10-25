@@ -37,7 +37,7 @@ struct MusicPlayer: Identifiable, Equatable {
         name: "Musik",
         notification: Notification.Name("com.apple.Music.playerInfo"),
         durationDivisor: 1,
-        artwork: .data("data of artwork 1 of current track"),
+        artwork: .data("raw data of artwork 1 of current track"),
         accent: Color(red: 0.98, green: 0.24, blue: 0.33)
     )
 
