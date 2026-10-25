@@ -251,7 +251,7 @@ final class NotchViewModel: ObservableObject {
             if pasteboard.changeCount != lastDragChangeCount {
                 lastDragChangeCount = pasteboard.changeCount
                 let types = pasteboard.types ?? []
-                isFileDragActive = types.contains(.fileURL) || types.contains(.tiff) || types.contains(.png)
+                isFileDragActive = types.contains(where: ShelfStore.acceptedDragTypes.contains)
             }
         } else {
             // Nur beim Loslassen abgleichen – im Leerlauf wird das Pasteboard nicht abgefragt.
