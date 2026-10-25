@@ -38,9 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateHotKey()
     }
 
-    // MARK: - Tastenkürzel
+    // MARK: - Keyboard shortcut
 
-    /// Registriert ⌃⌥D, solange es in den Einstellungen aktiv ist.
+    /// Registers ⌃⌥D as long as it is enabled in the settings.
     private func updateHotKey() {
         hotKey = nil
         guard UserDefaults.standard.bool(forKey: Settings.hotKeyEnabled) else { return }
@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: - Menüleisten-Icon
+    // MARK: - Menu bar icon
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -63,29 +63,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         let defaults = UserDefaults.standard
 
-        let openItem = item("Ablage öffnen", #selector(openNotch))
+        let openItem = item("Open Shelf", #selector(openNotch))
         if hotKey != nil {
-            // Nur zur Anzeige – ausgelöst wird das Kürzel systemweit über `HotKey`.
+            // Display only – the shortcut is triggered system-wide via `HotKey`.
             openItem.keyEquivalent = "d"
             openItem.keyEquivalentModifierMask = [.control, .option]
         }
         menu.addItem(openItem)
-        menu.addItem(item("Ablage leeren (\(shelf.items.count))", #selector(clearShelf)))
-        menu.addItem(item("Ablage-Ordner im Finder zeigen", #selector(revealStorage)))
+        menu.addItem(item("Clear Shelf (\(shelf.items.count))", #selector(clearShelf)))
+        menu.addItem(item("Show Shelf Folder in Finder", #selector(revealStorage)))
         menu.addItem(.separator())
-        menu.addItem(item("Dateien kopieren statt verlinken", #selector(toggleCopy),
+        menu.addItem(item("Copy Files Instead of Linking", #selector(toggleCopy),
                           on: defaults.bool(forKey: Settings.copyFiles)))
-        menu.addItem(item("Nach Herausziehen aus der Ablage entfernen", #selector(toggleRemoveAfterDragOut),
+        menu.addItem(item("Remove from Shelf After Dragging Out", #selector(toggleRemoveAfterDragOut),
                           on: defaults.bool(forKey: Settings.removeAfterDragOut)))
-        menu.addItem(item("Musik in geschlossener Notch zeigen", #selector(toggleLiveActivity),
+        menu.addItem(item("Show Music in Closed Notch", #selector(toggleLiveActivity),
                           on: defaults.bool(forKey: Settings.showMusicWhenClosed)))
         menu.addItem(screenModeItem())
-        menu.addItem(item("Tastenkürzel ⌃⌥D", #selector(toggleHotKey),
+        menu.addItem(item("Keyboard Shortcut ⌃⌥D", #selector(toggleHotKey),
                           on: defaults.bool(forKey: Settings.hotKeyEnabled)))
-        menu.addItem(item("Bei Anmeldung starten", #selector(toggleLaunchAtLogin),
+        menu.addItem(item("Launch at Login", #selector(toggleLaunchAtLogin),
                           on: SMAppService.mainApp.status == .enabled))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "DropNotch beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit DropNotch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func item(_ title: String, _ action: Selector, on: Bool? = nil) -> NSMenuItem {
@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    /// Untermenü "Notch-Position" mit Häkchen beim aktiven Modus.
+    /// "Notch Position" submenu with a checkmark next to the active mode.
     private func screenModeItem() -> NSMenuItem {
         let submenu = NSMenu()
         let current = NotchScreenMode.current
@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             entry.representedObject = mode.rawValue
             submenu.addItem(entry)
         }
-        let parent = NSMenuItem(title: "Notch-Position", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: "Notch Position", action: nil, keyEquivalent: "")
         parent.submenu = submenu
         return parent
     }
@@ -156,8 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         } catch {
             let alert = NSAlert(error: error)
-            alert.messageText = "Autostart konnte nicht geändert werden"
-            alert.informativeText = "Lege DropNotch.app in den Programme-Ordner und versuche es erneut.\n\n\(error.localizedDescription)"
+            alert.messageText = "Couldn’t Change Launch at Login"
+            alert.informativeText = "Move DropNotch.app to the Applications folder and try again.\n\n\(error.localizedDescription)"
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         }

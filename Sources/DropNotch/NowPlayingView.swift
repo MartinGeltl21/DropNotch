@@ -5,11 +5,11 @@ struct NowPlayingView: View {
 
     var body: some View {
         if music.installedPlayers.isEmpty {
-            placeholder(icon: "music.note", text: "Weder Spotify noch Musik ist installiert")
+            placeholder(icon: "music.note", text: "Neither Spotify nor Music is installed")
         } else if let player = music.player {
             if music.permissionDenied {
-                placeholder(icon: "lock", text: "Erlaube DropNotch, \(player.name) zu steuern") {
-                    actionButton("Einstellungen öffnen", tint: player.accent, action: music.openAutomationSettings)
+                placeholder(icon: "lock", text: "Allow DropNotch to control \(player.name)") {
+                    actionButton("Open System Settings", tint: player.accent, action: music.openAutomationSettings)
                 }
             } else {
                 playerView(player)
@@ -17,10 +17,10 @@ struct NowPlayingView: View {
                     .onDisappear(perform: music.stopPolling)
             }
         } else {
-            placeholder(icon: "music.note", text: "Kein Musikplayer geöffnet") {
+            placeholder(icon: "music.note", text: "No music player open") {
                 HStack(spacing: 8) {
                     ForEach(music.installedPlayers) { player in
-                        actionButton("\(player.name) öffnen", tint: player.accent) { music.open(player) }
+                        actionButton("Open \(player.name)", tint: player.accent) { music.open(player) }
                     }
                 }
             }
@@ -33,14 +33,14 @@ struct NowPlayingView: View {
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
-                        // Zeigt, welche App gerade gesteuert wird.
+                        // Shows which app is currently being controlled.
                         if let icon = player.icon {
                             Image(nsImage: icon)
                                 .resizable()
                                 .frame(width: 13, height: 13)
                                 .help(player.name)
                         }
-                        Text(music.track?.title ?? "Nichts läuft")
+                        Text(music.track?.title ?? "Not Playing")
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                     }
@@ -84,7 +84,7 @@ struct NowPlayingView: View {
                         .controlSize(.mini)
                         .tint(player.accent)
                 }
-                .help("Lautstärke")
+                .help("Volume")
             }
         }
         .frame(maxHeight: .infinity)
@@ -104,7 +104,7 @@ struct NowPlayingView: View {
         .frame(width: 96, height: 96)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture { music.open(player) }
-        .help("\(player.name) öffnen")
+        .help("Open \(player.name)")
     }
 
     private func placeholder<Buttons: View>(icon: String, text: String,

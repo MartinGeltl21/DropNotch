@@ -1,8 +1,8 @@
 #!/usr/bin/env swift
-// Zeichnet das DropNotch-App-Icon und erzeugt Resources/AppIcon.icns + docs/icon.png.
+// Draws the DropNotch app icon and generates Resources/AppIcon.icns + docs/icon.png.
 //   swift scripts/make-icon.swift
-// Nur AppKit/CoreGraphics; alle Maße beziehen sich auf eine 1024er-Arbeitsfläche
-// (Apple-Icon-Raster: 824er-Kachel mit 100 px Rand, kontinuierliche Ecken).
+// AppKit/CoreGraphics only; all measurements refer to a 1024 px canvas
+// (Apple icon grid: 824 px tile with a 100 px margin, continuous corners).
 import AppKit
 import CoreGraphics
 import Foundation
@@ -13,7 +13,7 @@ let root = URL(fileURLWithPath: CommandLine.arguments[0])
     .deletingLastPathComponent().deletingLastPathComponent()
 let fm = FileManager.default
 
-// MARK: - Helfer
+// MARK: - Helpers
 
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -26,7 +26,7 @@ func gradient(_ colors: [CGColor], _ locations: [CGFloat]? = nil) -> CGGradient 
                colors: colors as CFArray, locations: locations)!
 }
 
-/// Superellipse ("Squircle") – nähert Apples kontinuierliche Ecken an.
+/// Superellipse ("squircle") – approximates Apple's continuous corners.
 func squircle(_ r: CGRect, exponent n: CGFloat = 5.2) -> CGPath {
     let p = CGMutablePath()
     let a = r.width / 2, b = r.height / 2
@@ -43,8 +43,8 @@ func squircle(_ r: CGRect, exponent n: CGFloat = 5.2) -> CGPath {
     return p
 }
 
-/// MacBook-Notch: hängt an `top`, mit nach außen geschwungenen Schultern oben
-/// und abgerundeten unteren Ecken. Koordinaten mit y nach unten.
+/// MacBook notch: hangs from `top`, with outward-curving shoulders at the top
+/// and rounded bottom corners. Coordinates with y pointing down.
 func notchPath(centerX: CGFloat, top: CGFloat, width w: CGFloat, height h: CGFloat,
                shoulder s: CGFloat, radius r: CGFloat) -> CGPath {
     let p = CGMutablePath()
@@ -62,17 +62,17 @@ func notchPath(centerX: CGFloat, top: CGFloat, width w: CGFloat, height h: CGFlo
     return p
 }
 
-// MARK: - Zeichnen
+// MARK: - Drawing
 
 func drawIcon(in ctx: CGContext) {
-    // y-Achse nach unten, Einheiten = 1024er-Raster
+    // y axis pointing down, units = 1024 grid
     ctx.translateBy(x: 0, y: 1024)
     ctx.scaleBy(x: 1, y: -1)
 
     let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
     let tilePath = squircle(tile)
 
-    // Schlagschatten der Kachel
+    // Drop shadow of the tile
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: 10), blur: 20, color: rgb(0x000000, 0.35))
     ctx.addPath(tilePath)
@@ -84,15 +84,15 @@ func drawIcon(in ctx: CGContext) {
     ctx.addPath(tilePath)
     ctx.clip()
 
-    // Hintergrund: dunkler Verlauf mit leichtem Blau-Violett-Schimmer
+    // Background: dark gradient with a slight blue-violet shimmer
     ctx.drawLinearGradient(gradient([rgb(0x2E3550), rgb(0x161A28), rgb(0x0B0D14)], [0, 0.55, 1]),
                            start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 924), options: [])
-    // Lichtschein unterhalb der Notch
+    // Glow below the notch
     ctx.drawRadialGradient(gradient([rgb(0x5B8CFF, 0.40), rgb(0x5B8CFF, 0)]),
                            startCenter: CGPoint(x: 512, y: 300), startRadius: 0,
                            endCenter: CGPoint(x: 512, y: 300), endRadius: 420, options: [])
 
-    // Pfeil-Spur (Bewegung nach oben in die Notch)
+    // Arrow trail (movement upward into the notch)
     let arrowGrad = gradient([rgb(0x6FD3FF), rgb(0x4D7CFF)])
     let shaft = CGMutablePath()
     shaft.move(to: CGPoint(x: 512, y: 790))
@@ -108,9 +108,9 @@ func drawIcon(in ctx: CGContext) {
     ctx.drawLinearGradient(arrowGrad, start: CGPoint(x: 512, y: 810), end: CGPoint(x: 512, y: 600), options: [])
     ctx.restoreGState()
 
-    // Dokument, das von unten in die Notch gleitet
+    // Document sliding into the notch from below
     let docRect = CGRect(x: 512 - 118, y: 172, width: 236, height: 356)
-    // Oberkante steckt in der Notch → schlichte Karte mit Textzeilen genügt
+    // Top edge is inside the notch → a simple card with text lines is enough
     let docPath = CGPath(roundedRect: docRect, cornerWidth: 30, cornerHeight: 30, transform: nil)
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: 14), blur: 30, color: rgb(0x000000, 0.5))
@@ -123,7 +123,7 @@ func drawIcon(in ctx: CGContext) {
     ctx.clip()
     ctx.drawLinearGradient(gradient([rgb(0xFFFFFF), rgb(0xDCE3F2)]),
                            start: CGPoint(x: 512, y: docRect.minY), end: CGPoint(x: 512, y: docRect.maxY), options: [])
-    // Textzeilen
+    // Text lines
     ctx.setFillColor(rgb(0xB4BFD6))
     for (i, w) in [CGFloat(140), 164, 110].enumerated() {
         let y = docRect.minY + 196 + CGFloat(i) * 40
@@ -133,7 +133,7 @@ func drawIcon(in ctx: CGContext) {
     ctx.fillPath()
     ctx.restoreGState()
 
-    // Notch (über dem Dokument, damit es darin verschwindet)
+    // Notch (above the document so it disappears into it)
     let notch = notchPath(centerX: 512, top: 100, width: 360, height: 132, shoulder: 40, radius: 52)
     ctx.saveGState()
     ctx.setShadow(offset: CGSize(width: 0, height: 8), blur: 24, color: rgb(0x000000, 0.55))
@@ -141,7 +141,7 @@ func drawIcon(in ctx: CGContext) {
     ctx.setFillColor(rgb(0x000000))
     ctx.fillPath()
     ctx.restoreGState()
-    // feine Kante an der Notch-Unterseite
+    // fine edge on the underside of the notch
     ctx.saveGState()
     ctx.addPath(notch)
     ctx.clip()
@@ -149,7 +149,7 @@ func drawIcon(in ctx: CGContext) {
                            start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 232), options: [])
     ctx.restoreGState()
 
-    // Glanz oben auf der Kachel + feine Innenkante
+    // Gloss on top of the tile + fine inner edge
     ctx.drawLinearGradient(gradient([rgb(0xFFFFFF, 0.07), rgb(0xFFFFFF, 0)]),
                            start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 420), options: [])
     ctx.restoreGState()
@@ -174,7 +174,7 @@ func render(size px: Int) -> CGImage {
 func writePNG(_ image: CGImage, to url: URL) {
     let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
     CGImageDestinationAddImage(dest, image, nil)
-    guard CGImageDestinationFinalize(dest) else { fatalError("PNG konnte nicht geschrieben werden: \(url.path)") }
+    guard CGImageDestinationFinalize(dest) else { fatalError("Could not write PNG: \(url.path)") }
 }
 
 // MARK: - Iconset + icns
@@ -196,7 +196,7 @@ proc.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 proc.arguments = ["-c", "icns", iconset.path, "-o", icns.path]
 try proc.run()
 proc.waitUntilExit()
-guard proc.terminationStatus == 0 else { fatalError("iconutil fehlgeschlagen") }
+guard proc.terminationStatus == 0 else { fatalError("iconutil failed") }
 
 let docs = root.appendingPathComponent("docs")
 try fm.createDirectory(at: docs, withIntermediateDirectories: true)

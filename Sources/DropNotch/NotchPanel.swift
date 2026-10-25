@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Rahmenloses, transparentes Panel, das über der Menüleiste an der Notch sitzt.
-/// Es aktiviert die App nicht (kein Fokus-Klau) und ist auf allen Spaces sichtbar.
+/// Borderless, transparent panel that sits above the menu bar at the notch.
+/// It doesn't activate the app (no focus stealing) and is visible on all Spaces.
 final class NotchPanel: NSPanel {
     init() {
         super.init(
@@ -27,12 +27,12 @@ final class NotchPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Hosting-View, die schon den ersten Klick annimmt – sonst müsste man eine Datei
-/// erst anklicken, bevor man sie aus der Notch ziehen kann.
+/// Hosting view that accepts the very first click – otherwise you'd have to click a file
+/// before you could drag it out of the notch.
 ///
-/// Sie ist außerdem das Ablageziel für die ganze Notch. Das läuft über AppKit statt über
-/// SwiftUIs `.onDrop`, weil nur so Datei-Versprechen (Mail-Anhänge, Fotos …) ankommen.
-/// NSHostingView implementiert die Ziel-Methoden selbst, daher sind sie hier überschrieben.
+/// It is also the drop target for the whole notch. This goes through AppKit instead of
+/// SwiftUI's `.onDrop`, because that's the only way file promises (Mail attachments, Photos …) arrive.
+/// NSHostingView implements the destination methods itself, so they are overridden here.
 final class NotchHostingView: NSHostingView<NotchView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -57,7 +57,7 @@ final class NotchHostingView: NSHostingView<NotchView> {
     override func draggingEnded(_ sender: NSDraggingInfo) { rootView.vm.isDropTargeted = false }
 
     private func dropOperation(for sender: NSDraggingInfo) -> NSDragOperation {
-        // Einträge, die gerade aus der Ablage herausgezogen werden, nicht wieder annehmen.
+        // Don't accept items that are currently being dragged out of the shelf.
         let accepted = !(sender.draggingSource is ShelfDragSourceView)
         if rootView.vm.isDropTargeted != accepted { rootView.vm.isDropTargeted = accepted }
         return accepted ? .copy : []

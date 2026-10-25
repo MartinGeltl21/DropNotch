@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>de</string>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>DropNotch</string>
 	<key>CFBundleIconFile</key>
@@ -27,6 +27,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>DropNotch steuert Spotify und Apple Music (Play/Pause, Titel wechseln, Lautstärke) und zeigt den aktuellen Song in der Notch an.</string>
+	<string>DropNotch controls Spotify and Apple Music (play/pause, skip tracks, volume) and shows the current song in the notch.</string>
 </dict>
 </plist>

@@ -1,16 +1,16 @@
 import Foundation
 
-/// UserDefaults-Schlüssel für alle Einstellungen.
+/// UserDefaults keys for all settings.
 enum Settings {
-    /// Dateien beim Ablegen in die Ablage kopieren statt nur zu verlinken.
+    /// Copy files into the shelf when dropping them instead of just linking them.
     static let copyFiles = "copyFiles"
-    /// Einträge entfernen, nachdem sie aus der Ablage herausgezogen und abgelegt wurden.
+    /// Remove items after they've been dragged out of the shelf and dropped.
     static let removeAfterDragOut = "removeAfterDragOut"
-    /// Laufenden Song (Cover + Equalizer) auch in der geschlossenen Notch zeigen.
+    /// Show the current song (artwork + equalizer) in the closed notch as well.
     static let showMusicWhenClosed = "showMusicWhenClosed"
-    /// Globales Tastenkürzel ⌃⌥D zum Auf- und Zuklappen der Notch.
+    /// Global keyboard shortcut ⌃⌥D to open and close the notch.
     static let hotKeyEnabled = "hotKeyEnabled"
-    /// Auf welchem Bildschirm die Notch sitzt (Rohwert von `NotchScreenMode`).
+    /// Which screen the notch sits on (raw value of `NotchScreenMode`).
     static let notchScreen = "notchScreen"
 
     static func registerDefaults() {
@@ -24,17 +24,17 @@ enum Settings {
     }
 }
 
-/// Auf welchem Bildschirm die Notch sitzt, wenn mehrere angeschlossen sind.
+/// Which screen the notch sits on when several are connected.
 enum NotchScreenMode: String, CaseIterable {
-    /// Immer auf dem Display mit Notch; ohne eines (z. B. zugeklappt) auf dem Hauptbildschirm.
+    /// Always on the display with the notch; without one (e.g. lid closed) on the main screen.
     case notchDisplay
-    /// Die geschlossene Notch wandert auf den Bildschirm, auf dem die Maus ist.
+    /// The closed notch moves to the screen the mouse is on.
     case mouse
 
     var title: String {
         switch self {
-        case .notchDisplay: return "Display mit Notch"
-        case .mouse: return "Bildschirm mit der Maus"
+        case .notchDisplay: return "Display with Notch"
+        case .mouse: return "Screen with Mouse Pointer"
         }
     }
 

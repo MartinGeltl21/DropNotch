@@ -2,8 +2,8 @@ import AppKit
 import XCTest
 @testable import DropNotch
 
-/// Temporäre Umgebung für einen Test: eigener Ablage-Ordner, eigene Einstellungen und ein
-/// Papierkorb, der nur mitschreibt – nichts davon berührt die echten Daten.
+/// Temporary environment for a test: its own shelf folder, its own settings and a
+/// Trash that only records – none of it touches the real data.
 @MainActor
 private final class Fixture {
     let root: URL
@@ -16,7 +16,7 @@ private final class Fixture {
     init() {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(suiteName, isDirectory: true)
         baseDir = root.appendingPathComponent("Store", isDirectory: true)
-        sourceDir = root.appendingPathComponent("Quelle", isDirectory: true)
+        sourceDir = root.appendingPathComponent("Source", isDirectory: true)
         try? FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         defaults = UserDefaults(suiteName: suiteName)!
     }
@@ -28,7 +28,7 @@ private final class Fixture {
         }
     }
 
-    func makeFile(_ name: String, contents: String = "Hallo") -> URL {
+    func makeFile(_ name: String, contents: String = "Hello") -> URL {
         let url = sourceDir.appendingPathComponent(name)
         try? Data(contents.utf8).write(to: url)
         return url
@@ -42,13 +42,13 @@ private final class Fixture {
 
 @MainActor
 final class ShelfStoreTests: XCTestCase {
-    // MARK: - Verlinken
+    // MARK: - Linking
 
     func testAddReference() {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Notiz.txt")
+        let file = fixture.makeFile("Note.txt")
 
         store.add(fileURL: file)
 
@@ -62,7 +62,7 @@ final class ShelfStoreTests: XCTestCase {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Notiz.txt")
+        let file = fixture.makeFile("Note.txt")
 
         store.add(fileURL: file)
         store.add(fileURL: file)
@@ -75,22 +75,22 @@ final class ShelfStoreTests: XCTestCase {
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
 
-        store.add(fileURL: fixture.sourceDir.appendingPathComponent("gibt-es-nicht.txt"))
+        store.add(fileURL: fixture.sourceDir.appendingPathComponent("does-not-exist.txt"))
 
         XCTAssertTrue(store.items.isEmpty)
     }
 
-    // MARK: - Kopieren
+    // MARK: - Copying
 
     func testCopyModeCopiesIntoStore() async throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         fixture.defaults.set(true, forKey: Settings.copyFiles)
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Bericht.txt", contents: "Inhalt")
+        let file = fixture.makeFile("Report.txt", contents: "Contents")
 
         store.add(fileURL: file)
-        XCTAssertEqual(store.pendingItems.map(\.name), ["Bericht.txt"], "Platzhalter während des Kopierens")
+        XCTAssertEqual(store.pendingItems.map(\.name), ["Report.txt"], "Placeholder while copying")
         XCTAssertTrue(store.items.isEmpty)
         await waitUntil { store.pendingItems.isEmpty }
 
@@ -99,8 +99,8 @@ final class ShelfStoreTests: XCTestCase {
         XCTAssertTrue(item.isCopy)
         XCTAssertEqual(item.sourceURL?.resolvingSymlinksInPath(), file.resolvingSymlinksInPath())
         XCTAssertTrue(item.url.path.hasPrefix(store.filesDir.path))
-        XCTAssertEqual(try String(contentsOf: item.url, encoding: .utf8), "Inhalt")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "Original bleibt unangetastet")
+        XCTAssertEqual(try String(contentsOf: item.url, encoding: .utf8), "Contents")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "Original stays untouched")
     }
 
     func testCopyIsNotAddedTwice() async {
@@ -108,11 +108,11 @@ final class ShelfStoreTests: XCTestCase {
         defer { fixture.cleanUp() }
         fixture.defaults.set(true, forKey: Settings.copyFiles)
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Bericht.txt")
+        let file = fixture.makeFile("Report.txt")
 
         store.add(fileURL: file)
         store.add(fileURL: file)
-        XCTAssertEqual(store.pendingItems.count, 1, "Doppelt abgelegt, während die Kopie noch läuft")
+        XCTAssertEqual(store.pendingItems.count, 1, "Added twice while the copy is still running")
         await waitUntil { store.pendingItems.isEmpty }
         store.add(fileURL: file)
 
@@ -120,14 +120,14 @@ final class ShelfStoreTests: XCTestCase {
         XCTAssertTrue(store.pendingItems.isEmpty)
     }
 
-    // MARK: - Persistenz
+    // MARK: - Persistence
 
     func testItemsSurviveNewStoreInstance() {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        store.add(fileURL: fixture.makeFile("Notiz.txt"))
-        store.add(text: "Hallo Welt")
+        store.add(fileURL: fixture.makeFile("Note.txt"))
+        store.add(text: "Hello World")
 
         let reloaded = fixture.makeStore()
 
@@ -140,8 +140,8 @@ final class ShelfStoreTests: XCTestCase {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Notiz.txt")
-        let kept = fixture.makeFile("Bleibt.txt")
+        let file = fixture.makeFile("Note.txt")
+        let kept = fixture.makeFile("Kept.txt")
         store.add(fileURL: file)
         store.add(fileURL: kept)
 
@@ -149,10 +149,10 @@ final class ShelfStoreTests: XCTestCase {
         store.refresh()
 
         XCTAssertEqual(paths(store.items.map(\.url)), paths([kept]))
-        XCTAssertEqual(paths(fixture.makeStore().items.map(\.url)), paths([kept]), "Bereinigte Liste wurde gespeichert")
+        XCTAssertEqual(paths(fixture.makeStore().items.map(\.url)), paths([kept]), "Cleaned-up list was saved")
     }
 
-    // MARK: - Bilder, Text und Links
+    // MARK: - Images, text and links
 
     func testSaveImage() throws {
         let fixture = Fixture()
@@ -168,7 +168,7 @@ final class ShelfStoreTests: XCTestCase {
 
         let item = try XCTUnwrap(store.items.first)
         XCTAssertTrue(item.isCopy)
-        XCTAssertTrue(item.name.hasPrefix("Bild "))
+        XCTAssertTrue(item.name.hasPrefix("Image "))
         XCTAssertEqual(item.url.pathExtension, "png")
         XCTAssertNotNil(NSImage(contentsOf: item.url))
     }
@@ -178,25 +178,25 @@ final class ShelfStoreTests: XCTestCase {
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
 
-        store.add(text: "Einkaufsliste")
+        store.add(text: "Shopping list")
 
         let item = try XCTUnwrap(store.items.first)
         XCTAssertTrue(item.isCopy)
         XCTAssertTrue(item.name.hasPrefix("Text "))
         XCTAssertEqual(item.url.pathExtension, "txt")
-        XCTAssertEqual(try String(contentsOf: item.url, encoding: .utf8), "Einkaufsliste")
+        XCTAssertEqual(try String(contentsOf: item.url, encoding: .utf8), "Shopping list")
     }
 
     func testSaveWebloc() throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let link = URL(string: "https://www.example.com/seite?a=1")!
+        let link = URL(string: "https://www.example.com/page?a=1")!
 
         store.add(webURL: link)
-        store.add(webURL: link, title: "Beispiel: Seite/Unterseite")
+        store.add(webURL: link, title: "Example: Page/Subpage")
 
-        XCTAssertEqual(store.items.map(\.name), ["www.example.com.webloc", "Beispiel- Seite-Unterseite.webloc"])
+        XCTAssertEqual(store.items.map(\.name), ["www.example.com.webloc", "Example- Page-Subpage.webloc"])
         for item in store.items {
             let data = try Data(contentsOf: item.url)
             let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String])
@@ -210,7 +210,7 @@ final class ShelfStoreTests: XCTestCase {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Notiz.txt")
+        let file = fixture.makeFile("Note.txt")
         let pasteboard = makePasteboard()
         defer { pasteboard.releaseGlobally() }
         pasteboard.writeObjects([file as NSURL])
@@ -228,11 +228,11 @@ final class ShelfStoreTests: XCTestCase {
         let pasteboard = makePasteboard()
         defer { pasteboard.releaseGlobally() }
         pasteboard.writeObjects([URL(string: "https://example.com")! as NSURL])
-        pasteboard.setString("Beispielseite", forType: NSPasteboard.PasteboardType("public.url-name"))
+        pasteboard.setString("Example Page", forType: NSPasteboard.PasteboardType("public.url-name"))
 
         XCTAssertTrue(store.handleDrop(pasteboard))
 
-        XCTAssertEqual(store.items.map(\.name), ["Beispielseite.webloc"])
+        XCTAssertEqual(store.items.map(\.name), ["Example Page.webloc"])
     }
 
     func testDropPlainText() {
@@ -241,7 +241,7 @@ final class ShelfStoreTests: XCTestCase {
         let store = fixture.makeStore()
         let pasteboard = makePasteboard()
         defer { pasteboard.releaseGlobally() }
-        pasteboard.setString("Nur ein Satz", forType: .string)
+        pasteboard.setString("Just a sentence", forType: .string)
 
         XCTAssertTrue(store.handleDrop(pasteboard))
 
@@ -259,15 +259,15 @@ final class ShelfStoreTests: XCTestCase {
         XCTAssertTrue(store.items.isEmpty)
     }
 
-    // MARK: - Entfernen
+    // MARK: - Removing
 
     func testRemoveTrashesOnlyCopies() {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        let file = fixture.makeFile("Notiz.txt")
+        let file = fixture.makeFile("Note.txt")
         store.add(fileURL: file)
-        store.add(text: "Kopie")
+        store.add(text: "Copy")
         let copy = store.items[1]
 
         store.remove(store.items[0])
@@ -275,31 +275,31 @@ final class ShelfStoreTests: XCTestCase {
 
         XCTAssertTrue(store.items.isEmpty)
         XCTAssertEqual(fixture.trashed, [copy.url])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "Verlinktes Original bleibt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "Linked original remains")
     }
 
     func testDragOutRemovesOnlyWhenEnabledAndDropped() {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.makeStore()
-        store.add(fileURL: fixture.makeFile("Eins.txt"))
-        store.add(fileURL: fixture.makeFile("Zwei.txt"))
+        store.add(fileURL: fixture.makeFile("One.txt"))
+        store.add(fileURL: fixture.makeFile("Two.txt"))
         let dragged = [store.items[0]]
 
         store.dragEnded(dragged, operation: .copy)
-        XCTAssertEqual(store.items.count, 2, "Einstellung ist standardmäßig aus")
+        XCTAssertEqual(store.items.count, 2, "Setting is off by default")
 
         fixture.defaults.set(true, forKey: Settings.removeAfterDragOut)
         store.dragEnded(dragged, operation: [])
-        XCTAssertEqual(store.items.count, 2, "Abgebrochener Drag entfernt nichts")
+        XCTAssertEqual(store.items.count, 2, "Cancelled drag removes nothing")
 
         store.dragEnded(dragged, operation: .copy)
-        XCTAssertEqual(store.items.map(\.name), ["Zwei.txt"])
+        XCTAssertEqual(store.items.map(\.name), ["Two.txt"])
     }
 
-    // MARK: - Hilfen
+    // MARK: - Helpers
 
-    /// Pfade ohne Symlink-Unterschiede (/var vs. /private/var aus aufgelösten Bookmarks).
+    /// Paths without symlink differences (/var vs. /private/var from resolved bookmarks).
     private func paths(_ urls: [URL]) -> [String] {
         urls.map { $0.resolvingSymlinksInPath().path }
     }

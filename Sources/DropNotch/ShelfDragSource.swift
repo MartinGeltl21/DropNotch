@@ -1,15 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Macht einen Bereich der Ablage zur Drag-Quelle. SwiftUIs `.onDrag` liefert nur einen
-/// einzigen Provider – hier bekommt jede Datei ein eigenes `NSDraggingItem`, so lassen sich
-/// mehrere Dateien auf einmal herausziehen.
+/// Turns an area of the shelf into a drag source. SwiftUI's `.onDrag` only provides a
+/// single provider – here every file gets its own `NSDraggingItem`, so several files
+/// can be dragged out at once.
 struct ShelfDragSource: NSViewRepresentable {
     let shelf: ShelfStore
     let vm: NotchViewModel
-    /// Die Einträge, die beim Drag-Start mitgenommen werden.
+    /// The items that are taken along when the drag starts.
     let items: () -> [ShelfItem]
-    /// Klick ohne Ziehen; das Ereignis liefert Klickanzahl und Modifier-Tasten.
+    /// Click without dragging; the event provides the click count and modifier keys.
     var onClick: (NSEvent) -> Void = { _ in }
 
     func makeNSView(context: Context) -> ShelfDragSourceView { ShelfDragSourceView(source: self) }
@@ -22,9 +22,9 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
     private var mouseDownEvent: NSEvent?
     private var draggedItems: [ShelfItem] = []
 
-    /// Kantenlänge des Vorschaubilds unter dem Mauszeiger.
+    /// Side length of the preview image under the mouse pointer.
     private static let imageSize: CGFloat = 52
-    /// Ab dieser Mausbewegung (in Punkten) wird aus einem Klick ein Drag.
+    /// Mouse movement (in points) from which a click becomes a drag.
     private static let dragThreshold: CGFloat = 3
 
     init(source: ShelfDragSource) {
@@ -37,7 +37,7 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    // MARK: - Maus
+    // MARK: - Mouse
 
     override func mouseDown(with event: NSEvent) {
         mouseDownEvent = event
@@ -58,7 +58,7 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
         source.onClick(event)
     }
 
-    /// Das Kontextmenü stammt aus SwiftUI (`.contextMenu`) – die Hosting-View darüber kennt es.
+    /// The context menu comes from SwiftUI (`.contextMenu`) – the hosting view above knows it.
     override func menu(for event: NSEvent) -> NSMenu? {
         var view = superview
         while let current = view {
@@ -75,7 +75,7 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
         guard !items.isEmpty else { return }
         let location = convert(event.locationInWindow, from: nil)
         let size = Self.imageSize
-        // Leicht versetzt gestapelt, wie im Finder.
+        // Stacked with a slight offset, like in Finder.
         let draggingItems = items.enumerated().map { index, item in
             let offset = CGFloat(min(index, 4)) * 4
             let frame = NSRect(x: location.x - size / 2 + offset, y: location.y - size / 2 - offset,
@@ -89,7 +89,7 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
         session.animatesToStartingPositionsOnCancelOrFail = true
     }
 
-    /// Vorschaubild bzw. Icon, quadratisch eingepasst.
+    /// Thumbnail or icon, fitted into a square.
     private static func dragImage(for url: URL) -> NSImage {
         let image = Thumbnails.image(for: url)
         return NSImage(size: NSSize(width: imageSize, height: imageSize), flipped: false) { rect in
@@ -102,8 +102,8 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
         }
     }
 
-    /// Nur Kopieren anbieten: Die Originale dürfen durch einen Drag nie verschoben werden.
-    /// (`.generic` dürfte das Ziel als Verschieben auslegen.)
+    /// Only offer copying: the originals must never be moved by a drag.
+    /// (The destination may interpret `.generic` as a move.)
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         .copy
     }
@@ -113,7 +113,7 @@ final class ShelfDragSourceView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        // Die Notch selbst nimmt eigene Einträge nicht an, dort endet der Drag mit `.none`.
+        // The notch itself doesn't accept its own items; there the drag ends with `.none`.
         source.shelf.dragEnded(draggedItems, operation: operation)
         draggedItems = []
     }

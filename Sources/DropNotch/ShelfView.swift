@@ -6,7 +6,7 @@ struct ShelfView: View {
     @ObservedObject var shelf: ShelfStore
     @ObservedObject var vm: NotchViewModel
     @State private var selection = Set<UUID>()
-    /// Zuletzt angeklickter Eintrag – Ausgangspunkt für ⇧-Klicks.
+    /// Last clicked item – starting point for ⇧-clicks.
     @State private var anchor: UUID?
 
     var body: some View {
@@ -21,7 +21,7 @@ struct ShelfView: View {
                 VStack(spacing: 6) {
                     Image(systemName: "tray.and.arrow.down")
                         .font(.system(size: 24))
-                    Text("Dateien hier reinziehen")
+                    Text("Drag files here")
                         .font(.system(size: 12))
                 }
                 .foregroundStyle(.secondary)
@@ -39,7 +39,7 @@ struct ShelfView: View {
                 }
             }
         }
-        // Klick auf eine freie Stelle hebt die Auswahl auf.
+        // Clicking an empty spot clears the selection.
         .contentShape(Rectangle())
         .onTapGesture { selection.removeAll() }
         .overlay(alignment: .bottomTrailing) {
@@ -51,8 +51,8 @@ struct ShelfView: View {
         .animation(.easeOut(duration: 0.15), value: vm.isDropTargeted)
     }
 
-    /// Klick wählt nur diesen Eintrag (bzw. hebt ihn wieder auf), ⌘-Klick nimmt ihn hinzu
-    /// oder heraus, ⇧-Klick wählt alles bis zum zuletzt angeklickten Eintrag.
+    /// Click selects only this item (or deselects it again), ⌘-click adds or removes it,
+    /// ⇧-click selects everything up to the last clicked item.
     private func select(_ item: ShelfItem, modifiers: NSEvent.ModifierFlags) {
         let ids = shelf.items.map(\.id)
         if modifiers.contains(.shift), let anchor,
@@ -68,7 +68,7 @@ struct ShelfView: View {
         anchor = item.id
     }
 
-    /// Ein ausgewählter Eintrag nimmt die ganze Auswahl mit, ein anderer nur sich selbst.
+    /// A selected item takes the whole selection along, any other item only itself.
     private func dragItems(for item: ShelfItem) -> [ShelfItem] {
         selection.contains(item.id) ? shelf.items.filter { selection.contains($0.id) } : [item]
     }
@@ -92,7 +92,7 @@ struct ShelfItemView: View {
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 10).fill(background))
         .overlay {
-            // Klicks und Drags übernimmt AppKit, Hover und Kontextmenü bleiben bei SwiftUI.
+            // AppKit handles clicks and drags; hover and the context menu stay with SwiftUI.
             ShelfDragSource(shelf: shelf, vm: vm, items: dragItems) { event in
                 if event.clickCount == 2 {
                     NSWorkspace.shared.open(item.url)
@@ -110,19 +110,19 @@ struct ShelfItemView: View {
                         .foregroundStyle(.white, .gray)
                 }
                 .buttonStyle(.plain)
-                .help("Aus Ablage entfernen")
+                .help("Remove from Shelf")
             }
         }
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Öffnen") { NSWorkspace.shared.open(item.url) }
-            Button("Im Finder zeigen") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
-            Button("Per AirDrop senden") {
+            Button("Open") { NSWorkspace.shared.open(item.url) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
+            Button("Send via AirDrop") {
                 NSApp.activate(ignoringOtherApps: true)
                 NSSharingService(named: .sendViaAirDrop)?.perform(withItems: [item.url])
             }
             Divider()
-            Button("Aus Ablage entfernen", role: .destructive) { shelf.remove(item) }
+            Button("Remove from Shelf", role: .destructive) { shelf.remove(item) }
         }
         .help(item.url.path)
     }
@@ -133,7 +133,7 @@ struct ShelfItemView: View {
     }
 }
 
-/// Platzhalter, solange eine Datei noch kopiert oder empfangen wird.
+/// Placeholder while a file is still being copied or received.
 struct PendingItemView: View {
     let item: PendingItem
 
@@ -146,11 +146,11 @@ struct PendingItemView: View {
         }
         .padding(6)
         .opacity(0.6)
-        .help("Wird abgelegt …")
+        .help("Adding to Shelf…")
     }
 }
 
-/// Dateiname unter dem Vorschaubild.
+/// File name below the thumbnail.
 struct ItemCaption: View {
     let name: String
 
@@ -164,7 +164,7 @@ struct ItemCaption: View {
     }
 }
 
-/// Griff in der Ecke der Ablage, mit dem man alle Einträge auf einmal herauszieht.
+/// Handle in the corner of the shelf for dragging out all items at once.
 struct DragAllChip: View {
     @ObservedObject var shelf: ShelfStore
     let vm: NotchViewModel
@@ -176,11 +176,11 @@ struct DragAllChip: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(.white.opacity(0.18)))
             .overlay { ShelfDragSource(shelf: shelf, vm: vm, items: { shelf.items }) }
-            .help("Alle Dateien herausziehen")
+            .help("Drag out all files")
     }
 }
 
-/// Bereits erzeugte Vorschaubilder – damit auch die Drag-Bilder sie zeigen.
+/// Thumbnails generated so far – so the drag images can show them too.
 enum Thumbnails {
     static let cache = NSCache<NSURL, NSImage>()
 
@@ -189,7 +189,7 @@ enum Thumbnails {
     }
 }
 
-/// Zeigt ein QuickLook-Vorschaubild (Bilder, PDFs …) oder sonst das Finder-Icon.
+/// Shows a Quick Look thumbnail (images, PDFs …) or otherwise the Finder icon.
 struct FileThumbnail: View {
     let url: URL
     @State private var thumbnail: NSImage?

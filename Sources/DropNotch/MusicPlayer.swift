@@ -1,24 +1,24 @@
 import AppKit
 import SwiftUI
 
-/// Ein per AppleScript steuerbarer Musikplayer und alles, worin sich die Player unterscheiden.
+/// A music player that can be controlled via AppleScript, and everything in which the players differ.
 struct MusicPlayer: Identifiable, Equatable {
-    /// Woher das Cover kommt.
+    /// Where the artwork comes from.
     enum Artwork: Equatable {
-        /// AppleScript-Ausdruck für die Cover-URL des Titels `t`; wird mit dem Zustand abgefragt.
+        /// AppleScript expression for the artwork URL of track `t`; queried together with the state.
         case url(String)
-        /// AppleScript-Ausdruck für die Bilddaten des aktuellen Titels; wird einmal pro Titel abgefragt.
+        /// AppleScript expression for the image data of the current track; queried once per track.
         case data(String)
     }
 
     let bundleID: String
     let name: String
-    /// Distributed Notification, die der Player bei jeder Änderung (Play/Pause, neuer Song) schickt.
+    /// Distributed notification the player posts on every change (play/pause, new song).
     let notification: Notification.Name
-    /// Die gemeldete Titeldauer geteilt hierdurch ergibt Sekunden (Spotify meldet Millisekunden).
+    /// The reported track duration divided by this gives seconds (Spotify reports milliseconds).
     let durationDivisor: Double
     let artwork: Artwork
-    /// Farbe für Equalizer und Buttons.
+    /// Color for the equalizer and buttons.
     let accent: Color
 
     var id: String { bundleID }
@@ -34,7 +34,7 @@ struct MusicPlayer: Identifiable, Equatable {
 
     static let appleMusic = MusicPlayer(
         bundleID: "com.apple.Music",
-        name: "Musik",
+        name: "Music",
         notification: Notification.Name("com.apple.Music.playerInfo"),
         durationDivisor: 1,
         artwork: .data("raw data of artwork 1 of current track"),
@@ -51,7 +51,7 @@ struct MusicPlayer: Identifiable, Equatable {
 
     var icon: NSImage? { appURL.map { NSWorkspace.shared.icon(forFile: $0.path) } }
 
-    /// Fragt Zustand, Lautstärke und aktuellen Titel zeilenweise ab.
+    /// Queries state, volume and the current track, one value per line.
     var stateScript: String {
         let artworkURL: String
         switch artwork {

@@ -1,11 +1,11 @@
 import AppKit
 
-/// Liest und steuert Spotify und Apple Music über AppleScript.
+/// Reads and controls Spotify and Apple Music via AppleScript.
 ///
-/// Beide Player senden bei jeder Änderung (Play/Pause, neuer Song) eine Distributed
-/// Notification; daraufhin wird der Zustand neu abgefragt. Die Position wird zwischen den
-/// Abfragen lokal hochgerechnet. Gesteuert wird der Player, der gerade spielt (bei beiden der
-/// zuletzt gestartete), sonst der zuletzt gesteuerte, solange er läuft.
+/// Both players post a distributed notification on every change (play/pause, new song);
+/// the state is then queried again. Between queries the position is extrapolated
+/// locally. The player that is currently playing is controlled (if both are, the one
+/// started most recently), otherwise the last controlled one, as long as it is running.
 @MainActor
 final class MusicController: ObservableObject {
     struct Track: Equatable {
@@ -17,13 +17,13 @@ final class MusicController: ObservableObject {
         var duration: Double
     }
 
-    /// Zuletzt bekannter Zustand eines laufenden Players.
+    /// Last known state of a running player.
     private struct PlayerState: Equatable {
         var isPlaying = false
-        /// Letzter Wechsel zwischen Play und Pause – entscheidet, wer aktiv ist, wenn beide spielen.
+        /// Last switch between play and pause – decides which one is active when both are playing.
         var changedAt = Date.distantPast
-        /// Der Player hat "Stopped" gemeldet (passiert beim Beenden). Bis zur nächsten
-        /// Meldung wird er nicht abgefragt – sonst startet macOS ihn sofort wieder.
+        /// The player reported "Stopped" (happens when quitting). It isn't queried until the
+        /// next notification – otherwise macOS would relaunch it right away.
         var isStopped = false
         var track: Track?
         var position: Double = 0
@@ -45,16 +45,16 @@ final class MusicController: ObservableObject {
     }
 
     @Published private(set) var installedPlayers: [MusicPlayer] = []
-    /// Der gesteuerte Player; `nil`, wenn keiner läuft.
+    /// The controlled player; `nil` if none is running.
     @Published private(set) var player: MusicPlayer?
     @Published private(set) var artwork: NSImage?
-    /// Nur laufende Player haben einen Eintrag.
+    /// Only running players have an entry.
     @Published private var states: [MusicPlayer.ID: PlayerState] = [:]
 
     private let queue = DispatchQueue(label: "de.moritz.dropnotch.applescript")
     private var artworkKey: String?
-    /// Player mit laufender Zustandsabfrage. Hängt die Queue (z. B. an der Erlaubnis-Abfrage
-    /// von macOS), stauen sich so keine weiteren Abfragen an.
+    /// Players with a state query in flight. If the queue hangs (e.g. on the macOS
+    /// permission prompt), this keeps further queries from piling up.
     private var pendingQueries: Set<MusicPlayer.ID> = []
     private var observers: [NSObjectProtocol] = []
     private var pollTimer: Timer?
@@ -88,7 +88,7 @@ final class MusicController: ObservableObject {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     if launched {
-                        // Frisch gestartet: ein "Stopped" vom letzten Beenden gilt nicht mehr.
+                        // Freshly launched: a "Stopped" from the last quit no longer applies.
                         self.states[player.id] = nil
                         self.installedPlayers = MusicPlayer.all.filter { $0.appURL != nil }
                     }
@@ -104,11 +104,11 @@ final class MusicController: ObservableObject {
         current?.elapsed(at: date) ?? 0
     }
 
-    // MARK: - Zustand abfragen
+    // MARK: - Querying state
 
     func refresh() {
-        // Wichtig: Nie ein Skript an einen Player schicken, der nicht läuft –
-        // sonst würde macOS ihn dafür starten.
+        // Important: never send a script to a player that isn't running –
+        // macOS would launch it to handle the script.
         let running = MusicPlayer.all.filter(\.isRunning)
         var next: [MusicPlayer.ID: PlayerState] = [:]
         for player in running { next[player.id] = states[player.id] ?? PlayerState() }
@@ -124,8 +124,8 @@ final class MusicController: ObservableObject {
         updateActivePlayer()
     }
 
-    /// Fragt den Zustand jede Sekunde neu ab, solange die offene Notch den Player zeigt –
-    /// so fällt auch Spulen direkt im Player auf, für das es keine Notification gibt.
+    /// Re-queries the state every second while the open notch shows the player –
+    /// this also catches seeking in the player itself, which posts no notification.
     func startPolling() {
         pollTimer?.invalidate()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -149,8 +149,8 @@ final class MusicController: ObservableObject {
 
     private func playerDidChange(_ player: MusicPlayer, stopped: Bool) {
         if stopped {
-            // Beim Beenden melden die Player "Stopped". Würden wir dann per AppleScript
-            // nachfragen, startet macOS den Player sofort wieder.
+            // The players report "Stopped" when quitting. If we queried them via AppleScript
+            // then, macOS would relaunch the player right away.
             if player.isRunning {
                 var state = states[player.id] ?? PlayerState()
                 state.isStopped = true
@@ -169,7 +169,7 @@ final class MusicController: ObservableObject {
         switch result {
         case .failure(let error):
             if error.code == -600 {
-                // Player läuft nicht mehr.
+                // Player is no longer running.
                 states[player.id] = nil
                 updateActivePlayer()
                 return
@@ -180,11 +180,11 @@ final class MusicController: ObservableObject {
             let parts = output.text.components(separatedBy: "\n")
             let wasPlaying = state.isPlaying
             state.setPlaying(parts[0] == "playing")
-            // Während am Lautstärkeregler gezogen wird, nicht mit älteren Werten überschreiben.
+            // Don't overwrite with older values while the volume slider is being dragged.
             if parts.count > 1, !isVolumeThrottled { state.volume = Self.parseNumber(parts[1]) }
             if parts.count >= 9 {
                 var artwork = parts[6]
-                // Spotify liefert manchmal http-URLs, die ATS blockiert.
+                // Spotify sometimes returns http URLs, which ATS blocks.
                 if artwork.hasPrefix("http://") { artwork = "https://" + artwork.dropFirst(7) }
                 let track = Track(
                     id: parts[2],
@@ -194,8 +194,8 @@ final class MusicController: ObservableObject {
                     artworkURL: URL(string: artwork),
                     duration: Self.parseNumber(parts[7]) / player.durationDivisor
                 )
-                // Position nur neu setzen, wenn sie spürbar von der Hochrechnung abweicht
-                // (z. B. nach Spulen im Player) – sonst würde jede Abfrage neu zeichnen.
+                // Only reset the position if it noticeably deviates from the extrapolation
+                // (e.g. after seeking in the player) – otherwise every query would redraw.
                 let position = Self.parseNumber(parts[8])
                 let drift = abs(position - state.elapsed(at: Date()))
                 if track != state.track || state.isPlaying != wasPlaying || drift > (state.isPlaying ? 1 : 0) {
@@ -211,8 +211,8 @@ final class MusicController: ObservableObject {
         updateActivePlayer()
     }
 
-    /// Wählt den gesteuerten Player: den spielenden (bei mehreren den zuletzt gestarteten),
-    /// sonst den bisherigen, solange er läuft, sonst irgendeinen laufenden.
+    /// Picks the controlled player: the one playing (if several, the one started most recently),
+    /// otherwise the previous one as long as it is running, otherwise any running one.
     private func updateActivePlayer() {
         let candidates = MusicPlayer.all.compactMap { player in states[player.id].map { (player, $0) } }
         let playing = candidates.filter { $0.1.isPlaying }.max { $0.1.changedAt < $1.1.changedAt }?.0
@@ -222,7 +222,7 @@ final class MusicController: ObservableObject {
         loadArtwork()
     }
 
-    /// AppleScript formatiert Kommazahlen je nach Systemsprache mit "," statt ".".
+    /// Depending on the system language, AppleScript formats decimals with "," instead of ".".
     private static func parseNumber(_ string: String) -> Double {
         Double(string.replacingOccurrences(of: ",", with: ".")) ?? 0
     }
@@ -248,8 +248,8 @@ final class MusicController: ObservableObject {
                 self.artwork = image
             }
         case .data(let expression):
-            // Musik liefert die Bilddaten je nach Titel als PICT, JPEG oder PNG;
-            // NSImage erkennt das Format selbst. Ohne Cover schlägt das Skript fehl.
+            // Music returns the image data as PICT, JPEG or PNG depending on the track;
+            // NSImage detects the format itself. Without artwork the script fails.
             run("tell application id \"\(player.bundleID)\" to get \(expression)") { [weak self] result in
                 guard let self, self.artworkKey == key else { return }
                 if case .success(let output) = result, let image = NSImage(data: output.data) {
@@ -261,11 +261,11 @@ final class MusicController: ObservableObject {
         }
     }
 
-    // MARK: - Steuerung
+    // MARK: - Controls
 
     func playPause() {
         guard let player, var state = states[player.id] else { return }
-        // Sofort umschalten, damit sich der Button direkt anfühlt.
+        // Toggle immediately so the button feels responsive.
         state.position = state.elapsed(at: Date())
         state.positionDate = Date()
         state.setPlaying(!state.isPlaying)
@@ -297,8 +297,8 @@ final class MusicController: ObservableObject {
         sendPendingVolume(to: player)
     }
 
-    /// Schickt höchstens alle 0,15 s einen Lautstärkebefehl, damit Ziehen am Regler
-    /// den Player nicht mit AppleScript flutet. Der letzte Wert geht immer raus.
+    /// Sends at most one volume command every 0.15 s so dragging the slider doesn't
+    /// flood the player with AppleScript. The last value is always sent.
     private func sendPendingVolume(to player: MusicPlayer) {
         guard !isVolumeThrottled, let volume = pendingVolume else { return }
         pendingVolume = nil
@@ -327,7 +327,7 @@ final class MusicController: ObservableObject {
             if case .failure(let error) = result, error.code == -1743 {
                 self?.states[player.id]?.permissionDenied = true
             }
-            // Die Player schicken meist selbst eine Notification, aber nicht bei jedem Befehl.
+            // The players usually post a notification themselves, but not for every command.
             if refreshAfter {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.refresh() }
             }
@@ -338,7 +338,7 @@ final class MusicController: ObservableObject {
 
     struct ScriptOutput {
         let text: String
-        /// Rohdaten des Ergebnisses, z. B. die Bilddaten eines Covers.
+        /// Raw data of the result, e.g. the image data of an album cover.
         let data: Data
     }
 
@@ -347,8 +347,8 @@ final class MusicController: ObservableObject {
         let message: String
     }
 
-    /// Führt AppleScript auf einer seriellen Queue aus, damit die UI nicht hängt
-    /// (z. B. während macOS beim ersten Mal nach der Automation-Erlaubnis fragt).
+    /// Runs AppleScript on a serial queue so the UI doesn't hang
+    /// (e.g. while macOS asks for Automation permission the first time).
     private func run(_ source: String, completion: @escaping @MainActor (Result<ScriptOutput, ScriptError>) -> Void) {
         queue.async {
             var errorInfo: NSDictionary?

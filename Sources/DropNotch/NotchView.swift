@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Notch-Form: oben links/rechts nach außen gebogene "Ohren", unten abgerundet.
+/// Notch shape: "ears" curving outward at the top left/right, rounded at the bottom.
 struct NotchShape: Shape {
     var earRadius: CGFloat
     var bottomRadius: CGFloat
@@ -57,10 +57,10 @@ struct NotchView: View {
                 .frame(width: size.width + ear * 2, height: size.height, alignment: .top)
                 .clipShape(NotchShape(earRadius: ear, bottomRadius: bottom))
         }
-        // Auf Macs ohne Notch ist die geschlossene Form unsichtbar.
+        // On Macs without a notch the closed shape is invisible.
         .opacity(vm.state == .closed && !vm.hasPhysicalNotch ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Drops nimmt NotchHostingView entgegen (wegen Datei-Versprechen).
+        // Drops are received by NotchHostingView (because of file promises).
         .environment(\.colorScheme, .dark)
     }
 
@@ -78,7 +78,7 @@ struct NotchView: View {
                 Spacer(minLength: vm.notchSize.height)
                 HStack(spacing: 8) {
                     Image(systemName: "tray.and.arrow.down.fill")
-                    Text("Hier ablegen")
+                    Text("Drop here")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -92,7 +92,7 @@ struct NotchView: View {
     }
 }
 
-/// Inhalt der aufgeklappten Notch: Kopfzeile neben der Kamera, darunter Musik + Ablage.
+/// Content of the open notch: header row next to the camera, music + shelf below.
 struct OpenNotchView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var shelf: ShelfStore
@@ -107,10 +107,10 @@ struct OpenNotchView: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: vm.notchSize.width + 20)
                 if !shelf.items.isEmpty {
-                    HeaderButton(systemImage: "trash", help: "Ablage leeren") { shelf.clear() }
+                    HeaderButton(systemImage: "trash", help: "Clear Shelf") { shelf.clear() }
                 }
                 HeaderButton(systemImage: vm.isPinned ? "pin.fill" : "pin",
-                             help: vm.isPinned ? "Lösen" : "Offen halten") {
+                             help: vm.isPinned ? "Unpin" : "Keep Open") {
                     vm.isPinned.toggle()
                 }
             }
@@ -150,7 +150,7 @@ struct HeaderButton: View {
     }
 }
 
-/// Mini-Anzeige in der geschlossenen Notch: Cover links, Equalizer rechts.
+/// Mini display in the closed notch: artwork on the left, equalizer on the right.
 struct LiveActivityView: View {
     @ObservedObject var music: MusicController
     let notchWidth: CGFloat

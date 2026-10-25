@@ -1,8 +1,8 @@
 import Carbon.HIToolbox
 
-/// Systemweites Tastenkürzel über Carbon `RegisterEventHotKey`. Anders als ein globaler
-/// Tasten-Monitor braucht das keine Bedienungshilfen-Freigabe. Solange die Instanz lebt,
-/// ist das Kürzel registriert.
+/// System-wide keyboard shortcut via Carbon `RegisterEventHotKey`. Unlike a global
+/// key monitor, this doesn't require Accessibility permission. The shortcut stays
+/// registered for as long as the instance is alive.
 final class HotKey {
     private static let signature: OSType = 0x444E_6368 // "DNch"
 
@@ -12,9 +12,9 @@ final class HotKey {
     private var handlerRef: EventHandlerRef?
 
     /// - Parameters:
-    ///   - keyCode: Virtueller Tastencode, z. B. `kVK_ANSI_D`.
-    ///   - modifiers: Carbon-Modifier, z. B. `controlKey | optionKey`.
-    /// - Returns: `nil`, wenn das Kürzel schon von einer anderen App belegt ist.
+    ///   - keyCode: Virtual key code, e.g. `kVK_ANSI_D`.
+    ///   - modifiers: Carbon modifiers, e.g. `controlKey | optionKey`.
+    /// - Returns: `nil` if the shortcut is already taken by another app.
     init?(keyCode: UInt32, modifiers: UInt32, action: @escaping @MainActor () -> Void) {
         id = keyCode << 16 | modifiers
         self.action = action
@@ -37,7 +37,7 @@ final class HotKey {
         if let handlerRef { RemoveEventHandler(handlerRef) }
     }
 
-    /// Carbon ruft den Handler auf dem Main-Thread auf.
+    /// Carbon calls the handler on the main thread.
     private func handle(_ event: EventRef) -> OSStatus {
         var pressed = EventHotKeyID()
         let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
