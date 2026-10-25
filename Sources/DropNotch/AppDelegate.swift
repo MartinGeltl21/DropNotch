@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import ServiceManagement
 import SwiftUI
 
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let spotify = SpotifyController()
     private var panel: NotchPanel!
     private var statusItem: NSStatusItem!
+    private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Settings.registerDefaults()
@@ -33,6 +35,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         setupStatusItem()
+        updateHotKey()
+    }
+
+    // MARK: - Tastenkürzel
+
+    /// Registriert ⌃⌥D, solange es in den Einstellungen aktiv ist.
+    private func updateHotKey() {
+        hotKey = nil
+        guard UserDefaults.standard.bool(forKey: Settings.hotKeyEnabled) else { return }
+        hotKey = HotKey(keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(controlKey | optionKey)) { [weak self] in
+            self?.vm.toggle()
+        }
     }
 
     // MARK: - Menüleisten-Icon
@@ -49,7 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         let defaults = UserDefaults.standard
 
-        menu.addItem(item("Ablage öffnen", #selector(openNotch)))
+        let openItem = item("Ablage öffnen", #selector(openNotch))
+        if hotKey != nil {
+            // Nur zur Anzeige – ausgelöst wird das Kürzel systemweit über `HotKey`.
+            openItem.keyEquivalent = "d"
+            openItem.keyEquivalentModifierMask = [.control, .option]
+        }
+        menu.addItem(openItem)
         menu.addItem(item("Ablage leeren (\(shelf.items.count))", #selector(clearShelf)))
         menu.addItem(item("Ablage-Ordner im Finder zeigen", #selector(revealStorage)))
         menu.addItem(.separator())
@@ -57,6 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                           on: defaults.bool(forKey: Settings.copyFiles)))
         menu.addItem(item("Musik in geschlossener Notch zeigen", #selector(toggleLiveActivity),
                           on: defaults.bool(forKey: Settings.showMusicWhenClosed)))
+        menu.addItem(screenModeItem())
+        menu.addItem(item("Tastenkürzel ⌃⌥D", #selector(toggleHotKey),
+                          on: defaults.bool(forKey: Settings.hotKeyEnabled)))
         menu.addItem(item("Bei Anmeldung starten", #selector(toggleLaunchAtLogin),
                           on: SMAppService.mainApp.status == .enabled))
         menu.addItem(.separator())
@@ -70,9 +93,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    /// Untermenü "Notch-Position" mit Häkchen beim aktiven Modus.
+    private func screenModeItem() -> NSMenuItem {
+        let submenu = NSMenu()
+        let current = NotchScreenMode.current
+        for mode in NotchScreenMode.allCases {
+            let entry = item(mode.title, #selector(selectScreenMode(_:)), on: mode == current)
+            entry.representedObject = mode.rawValue
+            submenu.addItem(entry)
+        }
+        let parent = NSMenuItem(title: "Notch-Position", action: nil, keyEquivalent: "")
+        parent.submenu = submenu
+        return parent
+    }
+
     @objc private func openNotch() {
-        vm.isPinned = true
-        vm.open()
+        vm.openPinned()
     }
 
     @objc private func clearShelf() { shelf.clear() }
@@ -90,6 +126,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let defaults = UserDefaults.standard
         defaults.set(!defaults.bool(forKey: Settings.showMusicWhenClosed), forKey: Settings.showMusicWhenClosed)
         vm.objectWillChange.send()
+    }
+
+    @objc private func selectScreenMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String else { return }
+        UserDefaults.standard.set(rawValue, forKey: Settings.notchScreen)
+        vm.updateScreen()
+    }
+
+    @objc private func toggleHotKey() {
+        let defaults = UserDefaults.standard
+        defaults.set(!defaults.bool(forKey: Settings.hotKeyEnabled), forKey: Settings.hotKeyEnabled)
+        updateHotKey()
     }
 
     @objc private func toggleLaunchAtLogin() {

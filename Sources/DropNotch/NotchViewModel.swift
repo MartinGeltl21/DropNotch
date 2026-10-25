@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import SwiftUI
 
@@ -14,13 +15,22 @@ enum NotchState: Equatable {
 /// Hält Zustand und Geometrie der Notch und verfolgt die Maus global.
 ///
 /// Das Panel ignoriert Mausereignisse, solange die Notch zu ist, damit Klicks auf die
-/// Menüleiste durchgehen. Ein Timer fragt die Mausposition ab; sobald sie in der Notch
-/// landet (auch während eines Drag-Vorgangs), klappt die Notch auf.
+/// Menüleiste durchgehen. Mausbewegungen kommen über globale und lokale Event-Monitore
+/// (für Mausereignisse ist keine Bedienungshilfen-Freigabe nötig). Ein Timer fragt die
+/// Mausposition nur ab, solange es nötig ist: während Hover- und Schließ-Verzögerung, bei
+/// offener Notch und solange die Maustaste gedrückt ist – während eines Drags liefern
+/// globale Monitore nicht zuverlässig Ereignisse. Ruht die Maus fern der Notch, läuft nichts.
 @MainActor
 final class NotchViewModel: ObservableObject {
     @Published private(set) var state: NotchState = .closed
     @Published var isDropTargeted = false
-    @Published var isPinned = false
+    @Published var isPinned = false {
+        didSet {
+            // Wer über den Pin-Button anheftet, will die Notch wirklich offen halten.
+            closesOnOutsideClick = false
+            updatePolling()
+        }
+    }
     @Published private(set) var notchSize = CGSize(width: 200, height: 32)
     @Published private(set) var hasPhysicalNotch = false
 
@@ -38,10 +48,14 @@ final class NotchViewModel: ObservableObject {
     private weak var spotify: SpotifyController?
     private var screen: NSScreen?
     private var timer: Timer?
+    private var eventMonitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
 
     private var lastDragChangeCount = NSPasteboard(name: .drag).changeCount
+    private var isButtonDown = false
     private var isFileDragActive = false
+    /// Per Tastenkürzel/Menü geöffnet: Ein Klick außerhalb schließt die Notch wieder.
+    private var closesOnOutsideClick = false
     private var hoverStart: Date?
     private var leaveStart: Date?
 
@@ -88,9 +102,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     func updateScreen() {
-        let screens = NSScreen.screens
-        let target = screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? screens.first
-        guard let target else { return }
+        guard let target = targetScreen() else { return }
         screen = target
 
         if target.safeAreaInsets.top > 0 {
@@ -113,6 +125,24 @@ final class NotchViewModel: ObservableObject {
         panel?.setFrame(frame, display: true)
     }
 
+    /// Bildschirm, auf dem die Notch laut Einstellung sitzen soll.
+    private func targetScreen() -> NSScreen? {
+        let screens = NSScreen.screens
+        switch NotchScreenMode.current {
+        case .notchDisplay:
+            // Ohne Notch-Display (z. B. zugeklappt) auf den Hauptbildschirm ausweichen.
+            return screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? screens.first
+        case .mouse:
+            // Offen bleibt die Notch, wo sie ist – sie wandert nur geschlossen mit.
+            if state == .open, let screen,
+               let current = screens.first(where: { $0.displayID == screen.displayID }) {
+                return current
+            }
+            let mouse = NSEvent.mouseLocation
+            return screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? screens.first
+        }
+    }
+
     /// Rechteck in Bildschirmkoordinaten (Ursprung unten links), oben mittig verankert.
     private func screenRect(width: CGFloat, height: CGFloat) -> CGRect {
         guard let screen else { return .zero }
@@ -124,27 +154,62 @@ final class NotchViewModel: ObservableObject {
     // MARK: - Maus-Tracking
 
     private func startTracking() {
-        timer?.invalidate()
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        let mouseEvents: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown]
+        eventMonitors = [
+            // Ereignisse in anderen Apps …
+            NSEvent.addGlobalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+                MainActor.assumeIsolated { self?.handleMouse(event) }
+            },
+            // … und in eigenen Fenstern (Panel, Menüleisten-Icon).
+            NSEvent.addLocalMonitorForEvents(matching: mouseEvents) { [weak self] event in
+                MainActor.assumeIsolated { self?.handleMouse(event) }
+                return event
+            },
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let handled = MainActor.assumeIsolated { self?.handleKeyDown(event) ?? false }
+                return handled ? nil : event
+            },
+        ].compactMap { $0 }
     }
 
-    private func tick() {
+    private func handleMouse(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown,
+           state == .open, closesOnOutsideClick, !openZone.contains(NSEvent.mouseLocation) {
+            close()
+        }
+        update()
+    }
+
+    /// Esc schließt die Notch, sobald das Panel den Tastaturfokus hat.
+    private func handleKeyDown(_ event: NSEvent) -> Bool {
+        guard Int(event.keyCode) == kVK_Escape, event.window === panel, state == .open else { return false }
+        close()
+        return true
+    }
+
+    /// Hover-Zone etwas großzügiger als die Notch, damit man sie leicht trifft.
+    /// Im Peek-Zustand zählt die ganze sichtbare "Hier ablegen"-Fläche, sonst
+    /// würde eine Datei, die man direkt auf den Text zieht, nicht angenommen.
+    private var hotZone: CGRect {
+        let hotSize = state == .peek ? shapeSize : CGSize(width: closedWidth, height: notchSize.height)
+        return screenRect(width: hotSize.width + earRadius * 2 + 16, height: hotSize.height + 4)
+            .insetBy(dx: 0, dy: -4)
+    }
+
+    private var openZone: CGRect {
+        screenRect(width: openWidth + earRadius * 2 + 12, height: openHeight + 10)
+            .insetBy(dx: 0, dy: -4)
+    }
+
+    private func update() {
+        if NotchScreenMode.current == .mouse, state != .open,
+           targetScreen()?.displayID != screen?.displayID {
+            updateScreen()
+        }
+
         let mouse = NSEvent.mouseLocation
         let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
         updateDragState(buttonDown: buttonDown)
-
-        // Hover-Zone etwas großzügiger als die Notch, damit man sie leicht trifft.
-        // Im Peek-Zustand zählt die ganze sichtbare "Hier ablegen"-Fläche, sonst
-        // würde eine Datei, die man direkt auf den Text zieht, nicht angenommen.
-        let hotSize = state == .peek ? shapeSize : CGSize(width: closedWidth, height: notchSize.height)
-        let hotZone = screenRect(width: hotSize.width + earRadius * 2 + 16, height: hotSize.height + 4)
-            .insetBy(dx: 0, dy: -4)
-        let openZone = screenRect(width: openWidth + earRadius * 2 + 12, height: openHeight + 10)
-            .insetBy(dx: 0, dy: -4)
 
         switch state {
         case .closed, .peek:
@@ -175,22 +240,45 @@ final class NotchViewModel: ObservableObject {
                 leaveStart = Date()
             }
         }
+        updatePolling()
     }
 
     /// Erkennt, ob gerade systemweit eine Datei gezogen wird: Beim Start eines Drags
     /// ändert sich der changeCount des Drag-Pasteboards.
     private func updateDragState(buttonDown: Bool) {
-        let pasteboard = NSPasteboard(name: .drag)
         if buttonDown {
+            let pasteboard = NSPasteboard(name: .drag)
             if pasteboard.changeCount != lastDragChangeCount {
                 lastDragChangeCount = pasteboard.changeCount
                 let types = pasteboard.types ?? []
                 isFileDragActive = types.contains(.fileURL) || types.contains(.tiff) || types.contains(.png)
             }
         } else {
+            // Nur beim Loslassen abgleichen – im Leerlauf wird das Pasteboard nicht abgefragt.
+            if isButtonDown { lastDragChangeCount = NSPasteboard(name: .drag).changeCount }
             isFileDragActive = false
             isInternalDragActive = false
-            lastDragChangeCount = pasteboard.changeCount
+        }
+        isButtonDown = buttonDown
+    }
+
+    /// Ob sich gerade etwas ohne Mausereignis ändern kann (abgelaufene Verzögerung,
+    /// Drag ohne globale Ereignisse, Verlassen des offenen Panels) – dann wird abgefragt.
+    private var needsPolling: Bool {
+        isButtonDown || hoverStart != nil || leaveStart != nil
+            || state == .peek || (state == .open && !isPinned)
+    }
+
+    private func updatePolling() {
+        if !needsPolling {
+            timer?.invalidate()
+            timer = nil
+        } else if timer == nil {
+            let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.update() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
         }
     }
 
@@ -201,6 +289,23 @@ final class NotchViewModel: ObservableObject {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         setState(.open)
         onOpen?()
+    }
+
+    /// Öffnet die Notch per Tastenkürzel oder Menü: angeheftet und mit Tastaturfokus, damit
+    /// Esc sie schließt. Das Panel aktiviert die App nicht, die vorderste App bleibt aktiv.
+    /// Ein Klick außerhalb schließt sie wieder, außer sie war schon über den Pin-Button angeheftet.
+    func openPinned() {
+        if !isPinned {
+            isPinned = true
+            closesOnOutsideClick = true
+        }
+        open()
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Für das Tastenkürzel: auf- bzw. zuklappen.
+    func toggle() {
+        if state == .open { close() } else { openPinned() }
     }
 
     func close() {
@@ -214,6 +319,26 @@ final class NotchViewModel: ObservableObject {
             state = newState
         }
         panel?.ignoresMouseEvents = newState != .open
-        if newState != .open { leaveStart = nil }
+        if newState != .open {
+            leaveStart = nil
+            returnKeyboardFocus()
+        }
+        updatePolling()
+    }
+
+    /// Gibt den Tastaturfokus an die vorderste App zurück, falls das Panel ihn hatte
+    /// (nach Tastenkürzel, Menü oder einem Klick in die Notch). `orderFrontRegardless`
+    /// macht das Panel dabei nicht wieder zum Key-Window.
+    private func returnKeyboardFocus() {
+        guard let panel, panel.isKeyWindow else { return }
+        panel.orderOut(nil)
+        panel.orderFrontRegardless()
+    }
+}
+
+@MainActor
+private extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
     }
 }
