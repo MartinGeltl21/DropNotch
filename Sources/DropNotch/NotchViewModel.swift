@@ -35,7 +35,7 @@ final class NotchViewModel: ObservableObject {
     var isInternalDragActive = false
 
     private weak var panel: NSPanel?
-    private weak var spotify: SpotifyController?
+    private weak var music: MusicController?
     private var screen: NSScreen?
     private var timer: Timer?
     private var cancellables = Set<AnyCancellable>()
@@ -51,11 +51,11 @@ final class NotchViewModel: ObservableObject {
 
     var onOpen: (() -> Void)?
 
-    func attach(panel: NSPanel, spotify: SpotifyController) {
+    func attach(panel: NSPanel, music: MusicController) {
         self.panel = panel
-        self.spotify = spotify
-        // Geschlossene Breite hängt von der Musik ab → neu zeichnen, wenn sich Spotify ändert.
-        spotify.objectWillChange
+        self.music = music
+        // Geschlossene Breite hängt von der Musik ab → neu zeichnen, wenn sich die Wiedergabe ändert.
+        music.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
         updateScreen()
@@ -67,8 +67,8 @@ final class NotchViewModel: ObservableObject {
     var showsLiveActivity: Bool {
         guard hasPhysicalNotch,
               UserDefaults.standard.bool(forKey: Settings.showMusicWhenClosed),
-              let spotify else { return false }
-        return spotify.isPlaying && spotify.track != nil
+              let music else { return false }
+        return music.isPlaying && music.track != nil
     }
 
     var closedWidth: CGFloat {

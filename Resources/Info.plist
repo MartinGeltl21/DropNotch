@@ -27,6 +27,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>DropNotch steuert Spotify (Play/Pause, Titel wechseln) und zeigt den aktuellen Song in der Notch an.</string>
+	<string>DropNotch steuert Spotify und Apple Music (Play/Pause, Titel wechseln, Lautstärke) und zeigt den aktuellen Song in der Notch an.</string>
 </dict>
 </plist>

@@ -37,7 +37,7 @@ struct NotchShape: Shape {
 struct NotchView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var shelf: ShelfStore
-    @ObservedObject var spotify: SpotifyController
+    @ObservedObject var music: MusicController
 
     private var isOpen: Bool { vm.state == .open }
 
@@ -71,7 +71,7 @@ struct NotchView: View {
         switch vm.state {
         case .closed:
             if vm.showsLiveActivity {
-                LiveActivityView(spotify: spotify, notchWidth: vm.notchSize.width, wing: vm.liveActivityWing)
+                LiveActivityView(music: music, notchWidth: vm.notchSize.width, wing: vm.liveActivityWing)
                     .frame(height: vm.notchSize.height)
                     .transition(.opacity)
             }
@@ -88,7 +88,7 @@ struct NotchView: View {
             }
             .transition(.opacity)
         case .open:
-            OpenNotchView(vm: vm, shelf: shelf, spotify: spotify)
+            OpenNotchView(vm: vm, shelf: shelf, music: music)
                 .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
         }
     }
@@ -98,7 +98,7 @@ struct NotchView: View {
 struct OpenNotchView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var shelf: ShelfStore
-    @ObservedObject var spotify: SpotifyController
+    @ObservedObject var music: MusicController
 
     var body: some View {
         VStack(spacing: 0) {
@@ -120,7 +120,7 @@ struct OpenNotchView: View {
             .frame(height: vm.notchSize.height)
 
             HStack(spacing: 16) {
-                NowPlayingView(spotify: spotify)
+                NowPlayingView(music: music)
                     .frame(width: 280)
                 ShelfView(shelf: shelf, vm: vm)
             }
@@ -154,17 +154,18 @@ struct HeaderButton: View {
 
 /// Mini-Anzeige in der geschlossenen Notch: Cover links, Equalizer rechts.
 struct LiveActivityView: View {
-    @ObservedObject var spotify: SpotifyController
+    @ObservedObject var music: MusicController
     let notchWidth: CGFloat
     let wing: CGFloat
 
     var body: some View {
+        let accent = music.player?.accent ?? .green
         HStack(spacing: 0) {
             Group {
-                if let artwork = spotify.artwork {
+                if let artwork = music.artwork {
                     Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
                 } else {
-                    Image(systemName: "music.note").foregroundStyle(.green)
+                    Image(systemName: "music.note").foregroundStyle(accent)
                 }
             }
             .frame(width: wing - 12, height: wing - 12)
@@ -173,7 +174,7 @@ struct LiveActivityView: View {
 
             Spacer(minLength: notchWidth)
 
-            EqualizerView()
+            EqualizerView(color: accent)
                 .frame(width: 16, height: 12)
                 .frame(width: wing)
         }
@@ -181,6 +182,8 @@ struct LiveActivityView: View {
 }
 
 struct EqualizerView: View {
+    let color: Color
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
@@ -188,7 +191,7 @@ struct EqualizerView: View {
                 ForEach(0..<4, id: \.self) { i in
                     let phase = sin(t * (5 + Double(i) * 1.7) + Double(i) * 1.3)
                     Capsule()
-                        .fill(Color.green)
+                        .fill(color)
                         .frame(width: 2.5, height: 4 + 8 * CGFloat((phase + 1) / 2))
                 }
             }

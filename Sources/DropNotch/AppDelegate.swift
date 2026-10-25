@@ -6,7 +6,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let vm = NotchViewModel()
     private let shelf = ShelfStore()
-    private let spotify = SpotifyController()
+    private let music = MusicController()
     private var panel: NotchPanel!
     private var statusItem: NSStatusItem!
 
@@ -15,15 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         panel = NotchPanel()
-        let hosting = NotchHostingView(rootView: NotchView(vm: vm, shelf: shelf, spotify: spotify))
+        let hosting = NotchHostingView(rootView: NotchView(vm: vm, shelf: shelf, music: music))
         hosting.sizingOptions = []
         panel.contentView = hosting
 
         vm.onOpen = { [weak self] in
             self?.shelf.refresh()
-            self?.spotify.refresh()
+            self?.music.refresh()
         }
-        vm.attach(panel: panel, spotify: spotify)
+        vm.attach(panel: panel, music: music)
         panel.orderFrontRegardless()
 
         NotificationCenter.default.addObserver(
