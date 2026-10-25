@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>DropNotch</string>
 	<key>CFBundleExecutable</key>
 	<string>DropNotch</string>
 	<key>CFBundleIconFile</key>
@@ -12,21 +14,19 @@
 	<string>de.moritz.dropnotch</string>
 	<key>CFBundleName</key>
 	<string>DropNotch</string>
-	<key>CFBundleDisplayName</key>
-	<string>DropNotch</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>DropNotch controls Spotify and Apple Music (play/pause, skip tracks, volume) and shows the current song in the notch.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>
