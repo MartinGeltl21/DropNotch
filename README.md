@@ -50,3 +50,7 @@ Warum AppleScript statt MediaRemote? Das private MediaRemote-Framework funktioni
 - Apple Music (über dieselbe AppleScript-Technik)
 - Mehrere Dateien auf einmal herausziehen
 - Zwischenablage-Verlauf, Kalender, Timer
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE). Jeder darf den Code frei nutzen, ändern und weitergeben.
