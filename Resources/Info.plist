@@ -6,6 +6,8 @@
 	<string>de</string>
 	<key>CFBundleExecutable</key>
 	<string>DropNotch</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>de.moritz.dropnotch</string>
 	<key>CFBundleName</key>
