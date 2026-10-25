@@ -1,42 +1,61 @@
 import SwiftUI
 
 struct NowPlayingView: View {
-    @ObservedObject var spotify: SpotifyController
+    @ObservedObject var music: MusicController
 
     var body: some View {
-        if !spotify.isInstalled {
-            placeholder(icon: "music.note", text: "Spotify ist nicht installiert")
-        } else if spotify.permissionDenied {
-            placeholder(icon: "lock", text: "Erlaube DropNotch, Spotify zu steuern",
-                        button: "Einstellungen öffnen", action: spotify.openAutomationSettings)
-        } else if !spotify.isRunning {
-            placeholder(icon: "music.note", text: "Spotify ist nicht geöffnet",
-                        button: "Spotify öffnen", action: spotify.openSpotify)
+        if music.installedPlayers.isEmpty {
+            placeholder(icon: "music.note", text: "Weder Spotify noch Musik ist installiert")
+        } else if let player = music.player {
+            if music.permissionDenied {
+                placeholder(icon: "lock", text: "Erlaube DropNotch, \(player.name) zu steuern") {
+                    actionButton("Einstellungen öffnen", tint: player.accent, action: music.openAutomationSettings)
+                }
+            } else {
+                playerView(player)
+                    .onAppear(perform: music.startPolling)
+                    .onDisappear(perform: music.stopPolling)
+            }
         } else {
-            player
+            placeholder(icon: "music.note", text: "Kein Musikplayer geöffnet") {
+                HStack(spacing: 8) {
+                    ForEach(music.installedPlayers) { player in
+                        actionButton("\(player.name) öffnen", tint: player.accent) { music.open(player) }
+                    }
+                }
+            }
         }
     }
 
-    private var player: some View {
+    private func playerView(_ player: MusicPlayer) -> some View {
         HStack(spacing: 14) {
-            artwork
+            artwork(player)
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(spotify.track?.title ?? "Nichts läuft")
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    Text(spotify.track?.artist ?? " ")
+                    HStack(spacing: 5) {
+                        // Zeigt, welche App gerade gesteuert wird.
+                        if let icon = player.icon {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .frame(width: 13, height: 13)
+                                .help(player.name)
+                        }
+                        Text(music.track?.title ?? "Nichts läuft")
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    Text(music.track?.artist ?? " ")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    let duration = spotify.track?.duration ?? 0
-                    let current = spotify.currentPosition(at: context.date)
+                    let duration = music.track?.duration ?? 0
+                    let current = music.currentPosition(at: context.date)
                     VStack(spacing: 3) {
                         ProgressBar(progress: duration > 0 ? current / duration : 0) { fraction in
-                            spotify.seek(toFraction: fraction)
+                            music.seek(toFraction: fraction)
                         }
                         HStack {
                             Text(Self.format(current))
@@ -49,20 +68,31 @@ struct NowPlayingView: View {
                 }
 
                 HStack(spacing: 22) {
-                    ControlButton(systemImage: "backward.fill", size: 14, action: spotify.previousTrack)
-                    ControlButton(systemImage: spotify.isPlaying ? "pause.fill" : "play.fill", size: 20,
-                                  action: spotify.playPause)
-                    ControlButton(systemImage: "forward.fill", size: 14, action: spotify.nextTrack)
+                    ControlButton(systemImage: "backward.fill", size: 14, action: music.previousTrack)
+                    ControlButton(systemImage: music.isPlaying ? "pause.fill" : "play.fill", size: 20,
+                                  action: music.playPause)
+                    ControlButton(systemImage: "forward.fill", size: 14, action: music.nextTrack)
                 }
                 .frame(maxWidth: .infinity)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "speaker.wave.3.fill", variableValue: music.volume / 100)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18)
+                    Slider(value: Binding(get: { music.volume }, set: music.setVolume), in: 0...100)
+                        .controlSize(.mini)
+                        .tint(player.accent)
+                }
+                .help("Lautstärke")
             }
         }
         .frame(maxHeight: .infinity)
     }
 
-    private var artwork: some View {
+    private func artwork(_ player: MusicPlayer) -> some View {
         Group {
-            if let image = spotify.artwork {
+            if let image = music.artwork {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
             } else {
                 ZStack {
@@ -73,24 +103,26 @@ struct NowPlayingView: View {
         }
         .frame(width: 96, height: 96)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onTapGesture(perform: spotify.openSpotify)
-        .help("Spotify öffnen")
+        .onTapGesture { music.open(player) }
+        .help("\(player.name) öffnen")
     }
 
-    private func placeholder(icon: String, text: String, button: String? = nil,
-                             action: (() -> Void)? = nil) -> some View {
+    private func placeholder<Buttons: View>(icon: String, text: String,
+                                            @ViewBuilder buttons: () -> Buttons = { EmptyView() }) -> some View {
         VStack(spacing: 8) {
             Image(systemName: icon).font(.system(size: 24)).foregroundStyle(.secondary)
             Text(text).font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if let button, let action {
-                Button(button, action: action)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                    .controlSize(.small)
-            }
+            buttons()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.05)))
+    }
+
+    private func actionButton(_ title: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.borderedProminent)
+            .tint(tint)
+            .controlSize(.small)
     }
 
     static func format(_ seconds: Double) -> String {
