@@ -60,9 +60,7 @@ struct NotchView: View {
         // Auf Macs ohne Notch ist die geschlossene Form unsichtbar.
         .opacity(vm.state == .closed && !vm.hasPhysicalNotch ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onDrop(of: [.fileURL, .image], isTargeted: $vm.isDropTargeted) { providers in
-            shelf.handleDrop(providers)
-        }
+        // Drops nimmt NotchHostingView entgegen (wegen Datei-Versprechen).
         .environment(\.colorScheme, .dark)
     }
 

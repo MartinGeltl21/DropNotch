@@ -1,5 +1,4 @@
 import AppKit
-import UniformTypeIdentifiers
 
 struct ShelfItem: Identifiable, Codable, Equatable {
     let id: UUID
@@ -14,74 +13,128 @@ struct ShelfItem: Identifiable, Codable, Equatable {
     var name: String { url.lastPathComponent }
 }
 
+/// Platzhalter in der Ablage, solange eine Datei noch kopiert oder empfangen wird.
+struct PendingItem: Identifiable {
+    let id = UUID()
+    let name: String
+    /// Original, das gerade kopiert wird – nil bei Datei-Versprechen.
+    var sourceURL: URL? = nil
+    /// Wie viele Dateien noch ausstehen (ein Datei-Versprechen kann mehrere liefern).
+    var outstanding = 1
+}
+
 /// Die Datei-Ablage. Wird als JSON in ~/Library/Application Support/DropNotch gespeichert,
 /// überlebt also Neustarts.
 @MainActor
 final class ShelfStore: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
+    @Published private(set) var pendingItems: [PendingItem] = []
 
     let baseDir: URL
     var filesDir: URL { baseDir.appendingPathComponent("Files", isDirectory: true) }
     private var indexURL: URL { baseDir.appendingPathComponent("shelf.json") }
 
-    init() {
+    private let defaults: UserDefaults
+    private let moveToTrash: (URL) throws -> Void
+    private let promiseQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+
+    /// Ordner, Einstellungen und Papierkorb lassen sich für Tests austauschen.
+    init(
+        baseDir: URL? = nil,
+        defaults: UserDefaults = .standard,
+        moveToTrash: @escaping (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    ) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        baseDir = support.appendingPathComponent("DropNotch", isDirectory: true)
+        self.baseDir = baseDir ?? support.appendingPathComponent("DropNotch", isDirectory: true)
+        self.defaults = defaults
+        self.moveToTrash = moveToTrash
         try? FileManager.default.createDirectory(at: filesDir, withIntermediateDirectories: true)
         load()
     }
 
-    private var copyFiles: Bool { UserDefaults.standard.bool(forKey: Settings.copyFiles) }
-    /// Originale, die gerade im Hintergrund kopiert werden.
-    private var pendingCopies = Set<URL>()
+    private var copyFiles: Bool { defaults.bool(forKey: Settings.copyFiles) }
+
+    // MARK: - Drag & Drop
+
+    private static let imageTypes = NSImage.imageTypes.map { NSPasteboard.PasteboardType($0) }
+    /// Seitentitel, den Safari beim Ziehen eines Links mitliefert.
+    private static let urlNameType = NSPasteboard.PasteboardType("public.url-name")
+
+    /// Alles, was die Ablage per Drag & Drop annimmt.
+    static var acceptedDragTypes: [NSPasteboard.PasteboardType] {
+        NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) }
+            + [.fileURL, .URL, .string] + imageTypes
+    }
+
+    /// Übernimmt einen Drop. Vorrang: Datei > Datei-Versprechen > Bild > Web-Link > Text.
+    func handleDrop(_ pasteboard: NSPasteboard) -> Bool {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            urls.forEach(add(fileURL:))
+        } else if let receivers = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self]) as? [NSFilePromiseReceiver],
+                  !receivers.isEmpty {
+            // z. B. Mail-Anhänge oder Fotos, die erst beim Ablegen geschrieben werden.
+            receive(receivers)
+        } else if let type = pasteboard.availableType(from: Self.imageTypes),
+                  let data = pasteboard.data(forType: type),
+                  let image = NSImage(data: data) {
+            // z. B. Bilder aus dem Browser, die keine echte Datei sind.
+            add(image: image)
+        } else if let url = (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?
+                    .first(where: { ["http", "https"].contains($0.scheme?.lowercased()) }) {
+            add(webURL: url, title: pasteboard.string(forType: Self.urlNameType))
+        } else if let text = pasteboard.string(forType: .string),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            add(text: text)
+        } else {
+            return false
+        }
+        return true
+    }
+
+    /// Nach dem Herausziehen aus der Ablage: Einträge entfernen, falls so eingestellt und
+    /// die Dateien tatsächlich irgendwo abgelegt wurden.
+    func dragEnded(_ dragged: [ShelfItem], operation: NSDragOperation) {
+        guard operation != [], defaults.bool(forKey: Settings.removeAfterDragOut) else { return }
+        let ids = Set(dragged.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        save()
+        // Das Ziel liest die Datei womöglich erst nach dem Drop (der Finder kopiert z. B.
+        // asynchron) – Kopien daher erst etwas später in den Papierkorb legen.
+        Task {
+            try? await Task.sleep(for: .seconds(10))
+            dragged.forEach(deleteCopyIfNeeded)
+        }
+    }
 
     // MARK: - Hinzufügen
-
-    func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        var accepted = false
-        for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                accepted = true
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
-                    Task { @MainActor in self.add(fileURL: url) }
-                }
-            } else if provider.canLoadObject(ofClass: NSImage.self) {
-                // z. B. Bilder aus dem Browser, die keine echte Datei sind.
-                accepted = true
-                _ = provider.loadObject(ofClass: NSImage.self) { object, _ in
-                    guard let image = object as? NSImage else { return }
-                    Task { @MainActor in self.add(image: image) }
-                }
-            }
-        }
-        return accepted
-    }
 
     func add(fileURL: URL) {
         let url = fileURL.standardizedFileURL
         guard FileManager.default.fileExists(atPath: url.path),
-              !pendingCopies.contains(url),
+              !pendingItems.contains(where: { $0.sourceURL == url }),
               !items.contains(where: { $0.url.standardizedFileURL == url || $0.sourceURL == url })
         else { return }
 
         if copyFiles && !url.path.hasPrefix(filesDir.path) {
-            let id = UUID()
-            let dir = makeItemDir(id)
+            let pending = PendingItem(name: url.lastPathComponent, sourceURL: url)
+            pendingItems.append(pending)
+            let dir = makeItemDir(pending.id)
             let destination = dir.appendingPathComponent(url.lastPathComponent)
-            pendingCopies.insert(url)
             // Große Ordner nicht auf dem Main-Thread kopieren.
             Task.detached(priority: .userInitiated) {
                 do {
                     try FileManager.default.copyItem(at: url, to: destination)
-                    await MainActor.run {
-                        self.pendingCopies.remove(url)
-                        self.append(ShelfItem(id: id, url: destination, bookmark: nil, isCopy: true, sourceURL: url))
-                    }
+                    let item = ShelfItem(id: pending.id, url: destination, bookmark: nil, isCopy: true, sourceURL: url)
+                    await self.finish(pending.id, adding: item)
                 } catch {
                     NSLog("DropNotch: Kopieren fehlgeschlagen: \(error)")
                     try? FileManager.default.removeItem(at: dir)
-                    await MainActor.run { _ = self.pendingCopies.remove(url) }
+                    await self.finish(pending.id, adding: nil)
                 }
             }
         } else {
@@ -94,16 +147,99 @@ final class ShelfStore: ObservableObject {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else { return }
+        write(png, named: "Bild \(Self.timestamp()).png")
+    }
+
+    /// Speichert einen Link als .webloc, benannt nach Seitentitel oder Host.
+    func add(webURL: URL, title: String? = nil) {
+        let name = [title, webURL.host()]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? "Link"
+        guard let data = try? PropertyListSerialization.data(
+            fromPropertyList: ["URL": webURL.absoluteString], format: .xml, options: 0
+        ) else { return }
+        write(data, named: Self.fileName(from: name) + ".webloc")
+    }
+
+    func add(text: String) {
+        write(Data(text.utf8), named: "Text \(Self.timestamp()).txt")
+    }
+
+    /// Nimmt Datei-Versprechen an. Bis die Dateien geschrieben sind, steht ein Platzhalter
+    /// in der Ablage.
+    private func receive(_ receivers: [NSFilePromiseReceiver]) {
+        for receiver in receivers {
+            let pending = PendingItem(name: receiver.fileNames.first ?? "Datei",
+                                      outstanding: max(receiver.fileNames.count, 1))
+            pendingItems.append(pending)
+            let staging = makeItemDir(pending.id)
+            receiver.receivePromisedFiles(atDestination: staging, options: [:], operationQueue: promiseQueue) { url, error in
+                Task { @MainActor in
+                    self.receivedPromisedFile(url, error: error, pendingID: pending.id, staging: staging)
+                }
+            }
+        }
+    }
+
+    private func receivedPromisedFile(_ url: URL, error: Error?, pendingID: UUID, staging: URL) {
+        if let error {
+            NSLog("DropNotch: Datei empfangen fehlgeschlagen: \(error)")
+        } else {
+            // Jede Datei bekommt einen eigenen Ordner, damit sie sich einzeln entfernen lässt.
+            let id = UUID()
+            let dir = makeItemDir(id)
+            let destination = dir.appendingPathComponent(url.lastPathComponent)
+            do {
+                try FileManager.default.moveItem(at: url, to: destination)
+                append(ShelfItem(id: id, url: destination, bookmark: nil, isCopy: true))
+            } catch {
+                NSLog("DropNotch: Empfangene Datei verschieben fehlgeschlagen: \(error)")
+                try? FileManager.default.removeItem(at: dir)
+            }
+        }
+        guard let index = pendingItems.firstIndex(where: { $0.id == pendingID }) else { return }
+        pendingItems[index].outstanding -= 1
+        if pendingItems[index].outstanding == 0 {
+            pendingItems.remove(at: index)
+            try? FileManager.default.removeItem(at: staging)
+        }
+    }
+
+    /// Ersetzt einen Platzhalter durch den fertigen Eintrag (nil = fehlgeschlagen).
+    private func finish(_ pendingID: UUID, adding item: ShelfItem?) {
+        pendingItems.removeAll { $0.id == pendingID }
+        if let item { append(item) }
+    }
+
+    /// Legt Daten als neue Datei im App-eigenen Ordner ab.
+    private func write(_ data: Data, named name: String) {
         let id = UUID()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd 'um' HH.mm.ss"
-        let url = makeItemDir(id).appendingPathComponent("Bild \(formatter.string(from: Date())).png")
+        let dir = makeItemDir(id)
+        let url = dir.appendingPathComponent(name)
         do {
-            try png.write(to: url)
+            try data.write(to: url)
             append(ShelfItem(id: id, url: url, bookmark: nil, isCopy: true))
         } catch {
-            NSLog("DropNotch: Bild speichern fehlgeschlagen: \(error)")
+            NSLog("DropNotch: \(name) speichern fehlgeschlagen: \(error)")
+            try? FileManager.default.removeItem(at: dir)
         }
+    }
+
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'um' HH.mm.ss"
+        return formatter
+    }()
+
+    private static func timestamp() -> String { timestampFormatter.string(from: Date()) }
+
+    /// Macht aus einem Seitentitel einen gültigen Dateinamen.
+    private static func fileName(from title: String) -> String {
+        let cleaned = title
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: ". ").union(.newlines))
+        return cleaned.isEmpty ? "Link" : String(cleaned.prefix(100))
     }
 
     private func makeItemDir(_ id: UUID) -> URL {
@@ -137,7 +273,7 @@ final class ShelfStore: ObservableObject {
         // Papierkorb statt endgültig gelöscht zu werden – falls es die einzige Kopie war.
         let dir = item.url.deletingLastPathComponent()
         guard dir.path.hasPrefix(filesDir.path) else { return }
-        try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+        try? moveToTrash(item.url)
         try? FileManager.default.removeItem(at: dir)
     }
 
